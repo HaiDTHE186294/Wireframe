@@ -1,12 +1,13 @@
 import { useState, Fragment } from "react";
-import { Search, Plus, Eye, Edit, ArrowLeft, Ban, CheckCircle, ChevronRight, X, AlertTriangle } from "lucide-react";
+import { Search, Plus, Eye, Edit, ArrowLeft, Ban, CheckCircle, ChevronRight, AlertTriangle } from "lucide-react";
+import { Pagination } from "../components/Pagination";
 
 // --- INTERFACES ---
 type CategoryStatus = "Active" | "Disabled";
 
 interface Category {
   id: string;
-  parentId: string | null; // Cập nhật hỗ trợ Category Cha-Con
+  parentId: string | null;
   name: string;
   description: string;
   status: CategoryStatus;
@@ -16,10 +17,14 @@ interface Category {
 
 export function CategoryManagement() {
   // --- STATES ---
-  const [currentView, setCurrentView] = useState<"list" | "detail" | "form">("list");
+  const [currentView, setCurrentView] = useState<"list" | "add" | "detail">("list");
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditable, setIsEditable] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // --- PAGINATION STATES ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // --- MODAL STATES ---
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -32,11 +37,11 @@ export function CategoryManagement() {
       status: "Active", itemCount: 24, created_at: "2025-11-01",
     },
     {
-      id: "CAT-001-A", parentId: "CAT-001", name: "Single Origin", description: "Single origin roasted beans.",
+      id: "CAT-001-001", parentId: "CAT-001", name: "Single Origin", description: "Single origin roasted beans.",
       status: "Active", itemCount: 10, created_at: "2025-11-02",
     },
     {
-      id: "CAT-001-B", parentId: "CAT-001", name: "Espresso Blends", description: "Blends specifically for espresso.",
+      id: "CAT-001-002", parentId: "CAT-001", name: "Espresso Blends", description: "Blends specifically for espresso.",
       status: "Active", itemCount: 14, created_at: "2025-11-03",
     },
     {
@@ -51,7 +56,7 @@ export function CategoryManagement() {
 
   // --- FORM STATE ---
   const initialFormState: Partial<Category> = {
-    name: "", description: "", parentId: "", status: "Disabled" // Mặc định là Disabled khi tạo mới
+    name: "", description: "", parentId: "", status: "Disabled"
   };
   const [formData, setFormData] = useState<Partial<Category>>(initialFormState);
 
@@ -59,23 +64,29 @@ export function CategoryManagement() {
   const handleOpenList = () => {
     setCurrentView("list");
     setSelectedCategory(null);
+    setIsEditable(false);
   };
 
   const handleOpenDetail = (category: Category) => {
     setSelectedCategory(category);
+    setFormData({ ...category, parentId: category.parentId || "" });
+    setIsEditable(false);
     setCurrentView("detail");
   };
 
   const handleOpenCreate = () => {
-    setIsEditing(false);
     setFormData(initialFormState);
-    setCurrentView("form");
+    setIsEditable(true);
+    setCurrentView("add");
   };
 
-  const handleOpenEdit = (category: Category) => {
-    setIsEditing(true);
-    setFormData({ ...category, parentId: category.parentId || "" });
-    setCurrentView("form");
+  const handleCancelForm = () => {
+    if (currentView === "detail" && isEditable && selectedCategory) {
+      setFormData({ ...selectedCategory, parentId: selectedCategory.parentId || "" });
+      setIsEditable(false);
+    } else {
+      handleOpenList();
+    }
   };
 
   // Logic Popup Toggle
@@ -97,6 +108,21 @@ export function CategoryManagement() {
     setCatToToggle(null);
   };
 
+  // Logic Tạo ID phân cấp
+  const generateNewId = (parentId: string | null) => {
+    const siblings = categories.filter(c => c.parentId === parentId);
+    if (siblings.length === 0) {
+      return parentId ? `${parentId}-001` : `CAT-001`;
+    }
+    const maxSuffix = siblings.reduce((max, c) => {
+      const parts = c.id.split('-');
+      const lastPart = parseInt(parts[parts.length - 1], 10);
+      return !isNaN(lastPart) && lastPart > max ? lastPart : max;
+    }, 0);
+    const nextSuffix = String(maxSuffix + 1).padStart(3, "0");
+    return parentId ? `${parentId}-${nextSuffix}` : `CAT-${nextSuffix}`;
+  };
+
   const handleSaveCategory = () => {
     if (!formData.name?.trim()) {
       alert("Category name is required.");
@@ -105,7 +131,7 @@ export function CategoryManagement() {
 
     const parentToSave = formData.parentId === "" ? null : formData.parentId;
 
-    if (isEditing) {
+    if (currentView === "detail") {
       setCategories(categories.map(cat => 
         cat.id === formData.id ? { ...cat, ...formData, parentId: parentToSave } as Category : cat
       ));
@@ -113,29 +139,32 @@ export function CategoryManagement() {
       const newCategory: Category = {
         ...formData as Category,
         parentId: parentToSave,
-        id: `CAT-${String(categories.length + 1).padStart(3, "0")}`,
+        id: generateNewId(parentToSave),
         itemCount: 0,
-        status: "Disabled", // Bắt buộc Disabled khi mới tạo
+        status: "Disabled",
         created_at: new Date().toISOString().split("T")[0]
       };
-      setCategories([...categories, newCategory]); // Để category mới lên đầu hoặc dưới cùng tùy logic
+      setCategories([...categories, newCategory]);
     }
     handleOpenList();
   };
 
-  // Helper để lấy tên Category Cha
   const getParentName = (parentId: string | null) => {
     if (!parentId) return "None (Root)";
     const parent = categories.find(c => c.id === parentId);
     return parent ? parent.name : "Unknown";
   };
 
+  // --- PAGINATION LOGIC (Chỉ đếm Root) ---
+  const rootCategories = categories.filter(c => c.parentId === null);
+  const totalPages = Math.ceil(rootCategories.length / itemsPerPage) || 1;
+  const paginatedRoots = rootCategories.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   // --- TREE RENDER LOGIC ---
   const renderCategoryRow = (cat: Category, level: number = 0) => {
     const isMatchedSearch = cat.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             cat.id.toLowerCase().includes(searchTerm.toLowerCase());
     
-    // Nếu đang search và không match, thì ẩn đi (trừ khi con của nó match - logic này đơn giản hóa để hiển thị phẳng khi search)
     if (searchTerm && !isMatchedSearch) return null;
 
     const indentStyle = { paddingLeft: `${(level * 24) + 12}px` };
@@ -152,18 +181,15 @@ export function CategoryManagement() {
         <td className="p-3 border-r border-black text-sm text-gray-600 max-w-xs truncate">{cat.description || "-"}</td>
         <td className="p-3 border-r border-black text-sm font-mono text-center">{cat.itemCount}</td>
         <td className="p-3 border-r border-black">
-          <span className={`px-2 py-1 border text-xs flex items-center gap-1 w-fit ${cat.status === 'Active' ? 'border-black bg-white text-black' : 'border-gray-400 bg-gray-100 text-gray-500'}`}>
+          <span className={`px-2 py-1 border text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 w-fit mx-auto ${cat.status === 'Active' ? 'border-black bg-black text-white' : 'border-gray-400 bg-gray-100 text-gray-500'}`}>
             {cat.status === 'Active' ? <CheckCircle size={10}/> : <Ban size={10}/>}
             {cat.status}
           </span>
         </td>
         <td className="p-3 text-center">
           <div className="flex justify-center gap-2">
-            <button onClick={() => handleOpenDetail(cat)} className="p-1.5 border border-black bg-white hover:bg-gray-100" title="View Details">
+            <button onClick={() => handleOpenDetail(cat)} className="p-1.5 border border-black bg-white hover:bg-gray-100" title="View/Edit Details">
               <Eye size={14} />
-            </button>
-            <button onClick={() => handleOpenEdit(cat)} className="p-1.5 border border-black bg-white hover:bg-gray-100" title="Edit Category">
-              <Edit size={14} />
             </button>
             <button 
               onClick={() => requestToggleStatus(cat)} 
@@ -178,14 +204,13 @@ export function CategoryManagement() {
     );
   };
 
-  // Hàm đệ quy xây dựng cây hiển thị
-  const renderCategoryTree = (parentId: string | null = null, level: number = 0) => {
+  const renderChildren = (parentId: string, level: number) => {
     return categories
       .filter(c => c.parentId === parentId)
       .map(c => (
         <Fragment key={c.id}>
           {renderCategoryRow(c, level)}
-          {!searchTerm && renderCategoryTree(c.id, level + 1)}
+          {renderChildren(c.id, level + 1)}
         </Fragment>
       ));
   };
@@ -197,9 +222,9 @@ export function CategoryManagement() {
   if (currentView === "list") {
     return (
       <div className="bg-white text-black pb-10 relative">
-        <div className="flex items-center justify-between mb-6 pb-4 border-b border-black">
+        <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-black">
           <div>
-            <h1 className="text-xl font-bold uppercase tracking-tighter">Category Management</h1>
+            <h1 className="text-2xl font-black uppercase tracking-tighter">Category Management</h1>
             <p className="text-sm text-gray-600 mt-1 uppercase tracking-widest font-bold">Catalog Hierarchy & Structure</p>
           </div>
           <button 
@@ -210,20 +235,20 @@ export function CategoryManagement() {
           </button>
         </div>
 
-        <div className="mb-6 flex gap-4">
+        <div className="mb-6 flex gap-4 p-4 border border-black bg-gray-50">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
             <input 
               type="text" 
               placeholder="Search category name or ID (flattens tree)..." 
-              className="w-full pl-9 pr-4 py-2 border border-black text-sm font-bold uppercase placeholder:font-normal outline-none focus:ring-1 focus:ring-black"
+              className="w-full pl-9 pr-4 py-2 border border-black text-sm font-bold uppercase placeholder:font-normal outline-none focus:ring-1 focus:ring-black bg-white"
               value={searchTerm} 
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
         </div>
 
-        <div className="border border-black bg-white">
+        <div className="border border-black bg-white mb-6">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-black bg-gray-50">
@@ -231,7 +256,7 @@ export function CategoryManagement() {
                 <th className="p-3 text-xs font-bold uppercase tracking-wider border-r border-black">Name</th>
                 <th className="p-3 text-xs font-bold uppercase tracking-wider border-r border-black">Description</th>
                 <th className="p-3 text-xs font-bold uppercase tracking-wider border-r border-black text-center w-24">Items</th>
-                <th className="p-3 text-xs font-bold uppercase tracking-wider border-r border-black w-32">Status</th>
+                <th className="p-3 text-xs font-bold uppercase tracking-wider border-r border-black text-center w-32">Status</th>
                 <th className="p-3 text-xs font-bold uppercase tracking-wider text-center w-36">Actions</th>
               </tr>
             </thead>
@@ -240,45 +265,61 @@ export function CategoryManagement() {
                 <tr><td colSpan={6} className="p-8 text-center text-sm text-gray-500">No categories found.</td></tr>
               ) : (
                 searchTerm 
-                  // Khi có từ khóa tìm kiếm, hiển thị danh sách phẳng (không theo cây)
                   ? categories.map(c => renderCategoryRow(c, 0)) 
-                  // Khi không có từ khóa, đệ quy vẽ cây
-                  : renderCategoryTree(null, 0)
+                  : paginatedRoots.map(root => (
+                      <Fragment key={root.id}>
+                        {renderCategoryRow(root, 0)}
+                        {renderChildren(root.id, 1)}
+                      </Fragment>
+                    ))
               )}
             </tbody>
           </table>
         </div>
 
+        {/* Phân trang (Hiển thị luôn để dev hình dung) */}
+        {!searchTerm && (
+          <div className="mt-4 border-t border-black pt-4">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              itemsPerPage={itemsPerPage}
+              totalItems={rootCategories.length}
+            />
+          </div>
+        )}
+
         {/* --- MODAL: CONFIRM TOGGLE STATUS --- */}
         {showConfirmModal && catToToggle && (
           <div className="fixed inset-0 bg-white bg-opacity-90 z-50 flex items-center justify-center p-4" onClick={() => setShowConfirmModal(false)}>
-            <div className="bg-white border-2 border-black p-6 max-w-sm w-full shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center gap-3 mb-4 border-b border-black pb-4">
-                <AlertTriangle size={24} className={catToToggle.status === 'Active' ? "text-black" : "text-black"} />
-                <h2 className="font-black text-lg uppercase tracking-tighter">Confirm Action</h2>
+            <div className="bg-white border-2 border-black p-8 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-4 border-b-2 border-black pb-4">
+                <AlertTriangle size={24} className="text-black" />
+                <h2 className="font-black text-xl uppercase tracking-tighter">Confirm Action</h2>
               </div>
               
-              <div className="mb-6">
-                <p className="text-sm font-bold mb-2">
+              <div className="mb-8">
+                <p className="text-sm font-bold mb-3">
                   Are you sure you want to <span className="uppercase underline">{catToToggle.status === 'Active' ? 'Disable' : 'Activate'}</span> this category?
                 </p>
-                <div className="p-3 border border-black bg-gray-50 font-mono text-sm">
+                <div className="p-4 border border-black bg-gray-50 font-mono text-sm font-bold">
                   {catToToggle.id} - {catToToggle.name}
                 </div>
                 {catToToggle.status === 'Active' && (
-                  <p className="text-xs text-gray-500 mt-3">
+                  <p className="text-xs text-gray-500 mt-4">
                     Disabling this will hide it from product creation menus. Existing products will not be deleted but may lose category filtering.
                   </p>
                 )}
                 {catToToggle.status === 'Disabled' && (
-                  <p className="text-xs text-gray-500 mt-3">
+                  <p className="text-xs text-gray-500 mt-4">
                     Activating this will make it available for assigning to new products or materials.
                   </p>
                 )}
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-black">
-                <button onClick={() => setShowConfirmModal(false)} className="px-4 py-2 border border-black font-bold uppercase text-xs hover:bg-gray-100 transition-colors">Cancel</button>
+                <button onClick={() => setShowConfirmModal(false)} className="px-6 py-2 border border-black font-bold uppercase text-xs hover:bg-gray-100 transition-colors">Cancel</button>
                 <button onClick={confirmToggleStatus} className="px-6 py-2 bg-black text-white border border-black font-bold uppercase text-xs hover:invert transition-all">
                   Yes, {catToToggle.status === 'Active' ? 'Disable' : 'Activate'}
                 </button>
@@ -291,106 +332,57 @@ export function CategoryManagement() {
   }
 
   // ==========================================
-  // VIEW: DETAIL
+  // VIEW: FORM (ADD / DETAIL COMBINED)
   // ==========================================
-  if (currentView === "detail" && selectedCategory) {
-    return (
-      <div className="bg-white text-black pb-10">
-        <div className="flex items-center justify-between mb-6 pb-4 border-b border-black">
-          <div className="flex items-center gap-4">
-            <button onClick={handleOpenList} className="p-2 border border-black hover:bg-gray-100 transition-colors">
-              <ArrowLeft size={20} />
-            </button>
-            <div>
-              <h1 className="text-xl font-bold uppercase tracking-tighter">Category Details</h1>
-              <p className="text-sm font-mono text-gray-600 mt-1 uppercase">ID: {selectedCategory.id}</p>
-            </div>
-          </div>
-          <button onClick={() => handleOpenEdit(selectedCategory)} className="px-4 py-2 border border-black bg-white hover:bg-gray-100 text-sm flex items-center gap-2 font-bold uppercase">
-            <Edit size={14} /> Edit Data
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 border border-black p-6 bg-white space-y-6">
-            <div className="flex justify-between items-start border-b border-gray-200 pb-4">
-              <div>
-                <p className="text-xs font-bold uppercase text-gray-500 mb-1">Name</p>
-                <h2 className="text-2xl font-bold">{selectedCategory.name}</h2>
-              </div>
-              <span className={`px-3 py-1 border text-xs font-bold uppercase tracking-wider flex items-center gap-1 ${selectedCategory.status === 'Active' ? 'border-black bg-black text-white' : 'border-gray-400 bg-gray-100 text-gray-500'}`}>
-                {selectedCategory.status}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 pb-4 border-b border-gray-200">
-              <div>
-                <p className="text-xs font-bold uppercase text-gray-500 mb-1">Parent Category</p>
-                <p className="text-sm font-mono font-bold bg-gray-50 inline-block px-2 border border-black">
-                  {getParentName(selectedCategory.parentId)}
-                </p>
-              </div>
-              <div>
-                 <p className="text-xs font-bold uppercase text-gray-500 mb-1">Created Date</p>
-                 <p className="text-sm font-mono">{selectedCategory.created_at}</p>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-bold uppercase text-gray-500 mb-1">Description</p>
-              <p className="text-sm bg-gray-50 p-4 border border-black min-h-[80px]">
-                {selectedCategory.description || "No description provided."}
-              </p>
-            </div>
-          </div>
-
-          <div className="col-span-1 border border-black p-6 bg-gray-50 flex flex-col justify-center items-center text-center">
-             <div className="w-20 h-20 border-2 border-black rounded-full flex items-center justify-center bg-white mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                <span className="text-2xl font-mono font-black">{selectedCategory.itemCount}</span>
-             </div>
-             <h3 className="font-black uppercase tracking-tighter text-sm">Linked Items</h3>
-             <p className="text-xs font-bold text-gray-500 mt-2">
-               Products or materials currently assigned to this node.
-             </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ==========================================
-  // VIEW: FORM (ADD / UPDATE)
-  // ==========================================
-  if (currentView === "form") {
-    // Lọc bỏ chính nó và con của nó khỏi danh sách Parent hợp lệ (Tránh vòng lặp vô hạn)
+  if (currentView === "add" || currentView === "detail") {
     const validParents = categories.filter(c => c.id !== formData.id);
 
     return (
-      <div className="bg-white text-black pb-10">
-        <div className="flex items-center gap-4 mb-6 pb-4 border-b border-black">
-          <button onClick={handleOpenList} className="p-2 border border-black hover:bg-gray-100 transition-colors">
-            <ArrowLeft size={20} />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold uppercase tracking-tighter">
-              {isEditing ? "Update Category Data" : "Create New Category"}
+      <div className="bg-white text-black pb-10 max-w-6xl mx-auto">
+        <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-black">
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-black uppercase tracking-tighter">
+              {currentView === "add" ? "Create New Category" : "Category Details"}
             </h1>
-            <p className="text-sm text-gray-600 mt-1 uppercase font-bold tracking-widest">
-              {isEditing ? "Modify existing attributes" : "New items default to Disabled status"}
-            </p>
+            {currentView === "detail" && !isEditable && (
+              <button onClick={() => setIsEditable(true)} className="px-3 py-1 border border-black bg-white hover:bg-gray-100 flex items-center gap-1 text-sm font-bold uppercase tracking-wider transition-colors">
+                <Edit size={14} /> Unlock Edit
+              </button>
+            )}
           </div>
+          <button onClick={handleOpenList} className="px-4 py-2 border border-black bg-white hover:bg-gray-100 font-bold uppercase text-xs transition-colors">
+            Back to List
+          </button>
         </div>
 
-        <div className="border border-black bg-white p-6 md:p-8 max-w-2xl">
-          <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className={`border-2 border-black p-8 bg-white space-y-6 ${currentView === "add" ? "md:col-span-3 max-w-3xl" : "md:col-span-2"}`}>
             
-            {isEditing && (
-              <div>
-                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Category ID</label>
-                <input 
-                  type="text" value={formData.id} disabled 
-                  className="w-full p-2 border border-black text-sm bg-gray-100 font-mono cursor-not-allowed" 
-                />
+            <div className="flex items-center justify-between border-b border-black pb-4">
+              <h3 className="text-sm font-black uppercase tracking-widest text-gray-500">Master Data</h3>
+              {currentView === "detail" && (
+                <span className={`px-2 py-1 border text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 w-fit ${formData.status === 'Active' ? 'border-black bg-black text-white' : 'border-gray-400 bg-gray-100 text-gray-500'}`}>
+                  {formData.status}
+                </span>
+              )}
+            </div>
+
+            {currentView === "detail" && (
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Category ID (Auto)</label>
+                  <input 
+                    type="text" value={formData.id} disabled 
+                    className="w-full p-2 border border-black text-sm bg-gray-100 font-mono cursor-not-allowed" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Created Date</label>
+                  <input 
+                    type="text" value={formData.created_at} disabled 
+                    className="w-full p-2 border border-black text-sm bg-gray-100 font-mono cursor-not-allowed" 
+                  />
+                </div>
               </div>
             )}
 
@@ -401,8 +393,9 @@ export function CategoryManagement() {
                 value={formData.name} 
                 onChange={(e) => setFormData({...formData, name: e.target.value})} 
                 placeholder="e.g., Roasted Coffee Beans"
-                className="w-full p-2 border border-black text-sm font-bold outline-none focus:ring-1 focus:ring-black" 
-                autoFocus
+                disabled={!isEditable}
+                className={`w-full p-2 border border-black text-sm font-bold outline-none focus:ring-1 focus:ring-black ${!isEditable ? 'bg-gray-100 opacity-80 cursor-not-allowed' : 'bg-white'}`} 
+                autoFocus={isEditable}
               />
             </div>
 
@@ -411,14 +404,15 @@ export function CategoryManagement() {
               <select 
                 value={formData.parentId || ""}
                 onChange={(e) => setFormData({...formData, parentId: e.target.value})}
-                className="w-full p-2 border border-black text-sm font-bold uppercase outline-none focus:ring-1 focus:ring-black bg-white"
+                disabled={!isEditable}
+                className={`w-full p-2 border border-black text-sm font-bold uppercase outline-none focus:ring-1 focus:ring-black ${!isEditable ? 'bg-gray-100 opacity-80 cursor-not-allowed' : 'bg-white'}`}
               >
                 <option value="">-- No Parent (Root Level) --</option>
                 {validParents.map(p => (
                   <option key={p.id} value={p.id}>{p.id} - {p.name}</option>
                 ))}
               </select>
-              <p className="text-xs text-gray-500 mt-1 font-bold">Select a parent to create a sub-category hierarchy.</p>
+              {isEditable && <p className="text-xs text-gray-500 mt-2 font-bold">Select a parent to map this as a sub-category.</p>}
             </div>
 
             <div>
@@ -427,33 +421,50 @@ export function CategoryManagement() {
                 value={formData.description} 
                 onChange={(e) => setFormData({...formData, description: e.target.value})} 
                 placeholder="Describe the items that belong in this category..."
-                className="w-full p-2 border border-black text-sm h-32 outline-none focus:ring-1 focus:ring-black resize-none" 
+                disabled={!isEditable}
+                className={`w-full p-3 border border-black text-sm h-32 outline-none focus:ring-1 focus:ring-black resize-none ${!isEditable ? 'bg-gray-100 opacity-80 cursor-not-allowed' : 'bg-white'}`} 
               />
             </div>
 
-            {/* STATUS đã bị loại bỏ khỏi Form. Update/Create đều xử lý ngoài List */}
-            {!isEditing && (
+            {currentView === "add" && (
               <div className="p-3 border border-black bg-gray-50 flex items-start gap-2">
                  <AlertTriangle size={16} className="mt-0.5" />
-                 <p className="text-xs font-bold">New categories are created with a <span className="uppercase underline">Disabled</span> status by default. You must explicitly activate them from the Category List after creation.</p>
+                 <p className="text-xs font-bold">New categories are created with a <span className="uppercase underline">Disabled</span> status by default. You must explicitly activate them from the Category List.</p>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            {isEditable && (
+              <div className="flex justify-end gap-3 pt-6 border-t-2 border-black">
+                <button 
+                  onClick={handleCancelForm} 
+                  className="px-6 py-2 border border-black bg-white hover:bg-gray-100 text-sm font-bold uppercase tracking-wider transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleSaveCategory} 
+                  disabled={!formData.name}
+                  className="px-8 py-2 border border-black bg-black text-white hover:invert text-sm font-bold uppercase tracking-wider transition-all disabled:opacity-50"
+                >
+                  {currentView === "add" ? "Create Node" : "Save Changes"}
+                </button>
               </div>
             )}
           </div>
 
-          <div className="flex justify-end gap-3 mt-10 pt-6 border-t border-black">
-            <button 
-              onClick={handleOpenList} 
-              className="px-6 py-2 border border-black bg-white hover:bg-gray-100 text-sm font-bold uppercase transition-colors"
-            >
-              Cancel
-            </button>
-            <button 
-              onClick={handleSaveCategory} 
-              className="px-8 py-2 border border-black bg-black text-white hover:invert text-sm font-bold uppercase transition-all"
-            >
-              {isEditing ? "Save Changes" : "Create Node"}
-            </button>
-          </div>
+          {currentView === "detail" && selectedCategory && (
+             <div className="col-span-1 border-2 border-black p-8 bg-gray-50 flex flex-col items-center h-fit">
+                <h3 className="w-full text-sm font-black uppercase tracking-widest text-gray-500 mb-6 border-b border-black pb-2 text-center">Usage Stats</h3>
+                <div className="w-24 h-24 border-4 border-black rounded-full flex items-center justify-center bg-white mb-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  <span className="text-3xl font-mono font-black">{selectedCategory.itemCount}</span>
+                </div>
+                <h3 className="font-black uppercase tracking-tighter text-base">Linked Items</h3>
+                <p className="text-xs font-bold text-gray-500 mt-2 text-center">
+                  Products or materials currently assigned to this node mapping.
+                </p>
+             </div>
+          )}
         </div>
       </div>
     );

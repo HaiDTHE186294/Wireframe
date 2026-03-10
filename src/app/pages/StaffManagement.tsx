@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Lock, Unlock, Eye, Edit, Plus, Search, X } from "lucide-react";
+import { Pagination } from "../components/Pagination";
 
 // --- TYPES & INTERFACES ---
 type SystemRole = "CEO" | "Admin" | "Sale" | "Inventory";
@@ -14,10 +15,12 @@ interface StaffMember {
   phone: string;
   date_of_birth: string;
   gender: "Male" | "Female" | "Other";
+  address?: string; // Bổ sung address
   created_at: string;
 }
 
-const AVAILABLE_ROLES: SystemRole[] = ["CEO", "Admin", "Sale", "Inventory"];
+// Bỏ role Admin khỏi danh sách có thể thêm mới
+const AVAILABLE_ROLES: SystemRole[] = ["CEO", "Sale", "Inventory"];
 
 type ViewMode = "LIST" | "ADD" | "DETAIL";
 
@@ -32,39 +35,53 @@ export function StaffManagement() {
   const [showLockModal, setShowLockModal] = useState(false);
   
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
-  const [lockReason, setLockReason] = useState("");
 
   // --- MOCK DATA ---
   const [staffList, setStaffList] = useState<StaffMember[]>([
     { 
-      user_id: "USR-000", username: "ceo_boss", email: "ceo@katak.com", roles: ["CEO", "Admin"], status: "Active",
-      fullname: "Phạm Tối Cao", phone: "0999888999", date_of_birth: "1980-01-01", gender: "Male", created_at: "2024-01-01"
+      user_id: "USR-000", username: "ceo_boss", email: "ceo@katak.com", roles: ["CEO"], status: "Active",
+      fullname: "Phạm Tối Cao", phone: "0999888999", date_of_birth: "1980-01-01", gender: "Male", address: "Vinhome Central Park, HCMC", created_at: "2024-01-01"
     },
+    // Chỉ duy nhất user này có quyền Admin
     { 
       user_id: "USR-001", username: "admin_hai", email: "hai@katak.com", roles: ["Admin", "Inventory"], status: "Active",
-      fullname: "Nguyễn Văn Hải", phone: "0901234567", date_of_birth: "2004-11-03", gender: "Male", created_at: "2025-11-01"
+      fullname: "Nguyễn Văn Hải", phone: "0901234567", date_of_birth: "2004-11-03", gender: "Male", address: "Quận 9, TP. HCM", created_at: "2025-11-01"
     },
     { 
-      user_id: "USR-002", username: "manager_linh", email: "linh@katak.com", roles: ["Admin", "Sale"], status: "Active",
-      fullname: "Trần Thị Linh", phone: "0988777666", date_of_birth: "1995-05-20", gender: "Female", created_at: "2026-01-10"
+      user_id: "USR-002", username: "manager_linh", email: "linh@katak.com", roles: ["Sale"], status: "Active",
+      fullname: "Trần Thị Linh", phone: "0988777666", date_of_birth: "1995-05-20", gender: "Female", address: "Đà Lạt, Lâm Đồng", created_at: "2026-01-10"
     },
     { 
       user_id: "USR-003", username: "sale_nam", email: "nam.le@katak.com", roles: ["Sale"], status: "Active",
-      fullname: "Lê Văn Nam", phone: "0911222333", date_of_birth: "1998-12-12", gender: "Male", created_at: "2026-02-15"
+      fullname: "Lê Văn Nam", phone: "0911222333", date_of_birth: "1998-12-12", gender: "Male", address: "Gò Vấp, TP. HCM", created_at: "2026-02-15"
     },
     { 
       user_id: "USR-004", username: "kho_dung", email: "dung.kho@katak.com", roles: ["Inventory"], status: "Locked",
-      fullname: "Hoàng Văn Dũng", phone: "0944555666", date_of_birth: "1992-03-15", gender: "Male", created_at: "2026-01-05"
+      fullname: "Hoàng Văn Dũng", phone: "0944555666", date_of_birth: "1992-03-15", gender: "Male", address: "Biên Hòa, Đồng Nai", created_at: "2026-01-05"
     }
   ]);
 
   const [formData, setFormData] = useState<Partial<StaffMember>>({
-    username: "", email: "", roles: [], fullname: "", phone: "", date_of_birth: "", gender: "Male"
+    username: "", email: "", roles: [], fullname: "", phone: "", date_of_birth: "", gender: "Male", address: ""
   });
+
+  // --- FILTER & PAGINATION ---
+  const filteredStaff = staffList.filter(s => 
+    (s.fullname.toLowerCase().includes(searchTerm.toLowerCase()) || s.username.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    (roleFilter === "" || s.roles.includes(roleFilter as SystemRole))
+  );
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const totalPages = Math.ceil(filteredStaff.length / itemsPerPage);
+  const paginatedStaff = filteredStaff.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   // --- HANDLERS ---
   const handleOpenCreate = () => {
-    setFormData({ username: "", email: "", roles: [], fullname: "", phone: "", date_of_birth: "", gender: "Male" });
+    setFormData({ username: "", email: "", roles: [], fullname: "", phone: "", date_of_birth: "", gender: "Male", address: "" });
     setIsEditable(true);
     setViewMode("ADD");
   };
@@ -78,6 +95,10 @@ export function StaffManagement() {
 
   const handleToggleRole = (role: SystemRole) => {
     if (!isEditable) return;
+    
+    // Không cho phép chỉnh sửa quyền Admin (kể cả khi user hiện tại đang có)
+    if (role === "Admin") return;
+
     const currentRoles = formData.roles || [];
     if (currentRoles.includes(role)) {
       setFormData({ ...formData, roles: currentRoles.filter(r => r !== role) });
@@ -119,9 +140,6 @@ export function StaffManagement() {
   const handleToggleLock = (staff: StaffMember, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (staff.username === currentUser) return alert("You cannot lock your own account.");
-    if (staff.roles.includes("CEO") && !staffList.find(s => s.username === currentUser)?.roles.includes("CEO")) {
-      return alert("Only a CEO can lock another CEO's account.");
-    }
     
     setSelectedStaff(staff);
     if (staff.status === "Active") setShowLockModal(true);
@@ -130,13 +148,8 @@ export function StaffManagement() {
 
   const confirmLock = () => {
     setStaffList(staffList.map(s => s.user_id === selectedStaff?.user_id ? { ...s, status: "Locked" } : s));
-    setShowLockModal(false); setLockReason("");
+    setShowLockModal(false);
   };
-
-  const filteredStaff = staffList.filter(s => 
-    (s.fullname.toLowerCase().includes(searchTerm.toLowerCase()) || s.username.toLowerCase().includes(searchTerm.toLowerCase())) &&
-    (roleFilter === "" || s.roles.includes(roleFilter as SystemRole))
-  );
 
   return (
     <div className="bg-white text-black min-h-screen pb-10">
@@ -168,15 +181,17 @@ export function StaffManagement() {
                   placeholder="Search by name or username..." 
                   className="w-full pl-9 pr-4 py-2 border border-black text-sm outline-none focus:ring-1 focus:ring-black"
                   value={searchTerm} 
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                 />
               </div>
               <select 
                 className="border border-black px-3 py-2 text-sm outline-none bg-white min-w-[150px] font-bold"
                 value={roleFilter} 
-                onChange={(e) => setRoleFilter(e.target.value)}
+                onChange={(e) => { setRoleFilter(e.target.value); setCurrentPage(1); }}
               >
                 <option value="">All Roles</option>
+                {/* Chỉ hiển thị các role có thể lọc, có thể gộp cả Admin vào filter nếu cần, nhưng list hiện tại đang ẩn Admin khỏi Add/Edit */}
+                <option value="Admin">Admin</option>
                 {AVAILABLE_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
@@ -200,9 +215,11 @@ export function StaffManagement() {
                 </tr>
               </thead>
               <tbody>
-                {filteredStaff.map((member, idx) => (
+                {paginatedStaff.map((member, idx) => (
                   <tr key={member.user_id} className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${member.username === currentUser ? "bg-gray-50" : "bg-white"} ${member.status === "Locked" ? "opacity-60" : ""}`}>
-                    <td className="px-4 py-4 text-sm text-center border-r border-black font-mono text-gray-500">{idx + 1}</td>
+                    <td className="px-4 py-4 text-sm text-center border-r border-black font-mono text-gray-500">
+                      {(currentPage - 1) * itemsPerPage + idx + 1}
+                    </td>
                     <td className="px-4 py-4 border-r border-black">
                       <div className="font-bold text-sm font-mono">{member.user_id}</div>
                       <div className="text-xs text-gray-500 mt-1">@{member.username}</div>
@@ -244,13 +261,23 @@ export function StaffManagement() {
                 )}
               </tbody>
             </table>
+            
+            {filteredStaff.length > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                itemsPerPage={itemsPerPage}
+                totalItems={filteredStaff.length}
+              />
+            )}
           </div>
         </>
       )}
 
       {/* ================= MÀN HÌNH 2: FORM ADD / DETAIL ================= */}
       {(viewMode === "ADD" || viewMode === "DETAIL") && (
-        <div className="max-w-4xl mx-auto bg-white border-2 border-black p-8 shadow-sm">
+        <div className="max-w-5xl mx-auto bg-white border-2 border-black p-8 shadow-sm mt-4">
           <div className="flex items-center justify-between mb-8 pb-4 border-b-2 border-black">
             <div className="flex items-center gap-4">
               <h2 className="text-2xl font-black uppercase tracking-tighter">
@@ -276,7 +303,7 @@ export function StaffManagement() {
                 <div className="space-y-4">
                   {viewMode === "DETAIL" && (
                     <div>
-                      <label className="block text-xs font-bold uppercase mb-1">User ID</label>
+                      <label className="block text-xs font-bold uppercase mb-1 text-gray-500">User ID</label>
                       <input type="text" value={formData.user_id || ""} disabled className="w-full px-3 py-2 border border-black text-sm bg-gray-100 font-mono" />
                     </div>
                   )}
@@ -304,6 +331,20 @@ export function StaffManagement() {
                   <div>
                     <label className="block text-xs font-bold uppercase mb-2">Roles (Select multiple) *</label>
                     <div className={`grid grid-cols-2 gap-2 border border-black p-4 ${!isEditable ? "bg-gray-100" : "bg-white"}`}>
+                      {/* Hiển thị role Admin nếu user hiện tại đang có, nhưng luôn bị disable */}
+                      {formData.roles?.includes("Admin") && (
+                         <label className="flex items-center gap-2 text-sm font-bold uppercase cursor-not-allowed opacity-70">
+                            <input 
+                              type="checkbox" 
+                              disabled
+                              className="w-4 h-4 border-2 border-black accent-black"
+                              checked={true}
+                              readOnly
+                            />
+                            Admin
+                         </label>
+                      )}
+                      
                       {AVAILABLE_ROLES.map(role => (
                         <label key={role} className={`flex items-center gap-2 text-sm font-bold uppercase ${isEditable ? "cursor-pointer hover:opacity-80" : "cursor-not-allowed opacity-70"}`}>
                           <input 
@@ -348,6 +389,18 @@ export function StaffManagement() {
                       className={`w-full px-3 py-2 border border-black text-sm font-mono ${!isEditable ? "bg-gray-100" : "bg-white"} outline-none focus:ring-1 focus:ring-black`} 
                     />
                   </div>
+                  
+                  {/* Bổ sung Address */}
+                  <div>
+                    <label className="block text-xs font-bold uppercase mb-1">Address</label>
+                    <textarea 
+                      disabled={!isEditable}
+                      value={formData.address || ""} 
+                      onChange={(e) => setFormData({...formData, address: e.target.value})} 
+                      className={`w-full px-3 py-2 border border-black text-sm h-16 resize-none ${!isEditable ? "bg-gray-100" : "bg-white"} outline-none focus:ring-1 focus:ring-black`} 
+                    />
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold uppercase mb-1">Gender</label>
@@ -390,10 +443,10 @@ export function StaffManagement() {
         </div>
       )}
 
-      {/* --- MODAL: LOCK REASON --- */}
+      {/* --- MODAL: LOCK CONFIRMATION --- */}
       {showLockModal && selectedStaff && (
         <div className="fixed inset-0 bg-white bg-opacity-90 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border-2 border-black p-8 max-w-sm w-full shadow-2xl">
+          <div className="bg-white border-2 border-black p-8 max-w-md w-full shadow-2xl">
             <div className="flex justify-between items-start mb-6 pb-4 border-b-2 border-black">
               <div>
                 <h2 className="font-black text-xl uppercase tracking-tighter text-red-600">Suspend Account</h2>
@@ -404,22 +457,16 @@ export function StaffManagement() {
             </div>
 
             <div className="mb-6">
-              <label className="block text-xs font-bold uppercase mb-2">Reason for suspension *</label>
-              <textarea 
-                value={lockReason} 
-                onChange={(e) => setLockReason(e.target.value)}
-                placeholder="Policy violation, leaving company..." 
-                className="w-full p-3 border border-black text-sm h-28 outline-none focus:ring-2 focus:ring-red-600"
-                autoFocus
-              />
+              <p className="text-sm text-gray-600 font-bold">
+                 Are you sure you want to lock this account? The user will immediately lose access to the system.
+              </p>
             </div>
 
             <div className="flex gap-2 justify-end pt-4 border-t border-black">
               <button onClick={() => setShowLockModal(false)} className="px-4 py-2 border border-black bg-white hover:bg-gray-100 text-xs font-bold uppercase tracking-wider">Cancel</button>
               <button 
                 onClick={confirmLock} 
-                disabled={!lockReason.trim()} 
-                className="px-4 py-2 bg-red-600 text-white border border-black hover:bg-red-700 text-xs font-bold uppercase tracking-wider disabled:opacity-50 disabled:bg-gray-400"
+                className="px-4 py-2 bg-red-600 text-white border border-black hover:bg-red-700 text-xs font-bold uppercase tracking-wider"
               >
                 Confirm Lock
               </button>
