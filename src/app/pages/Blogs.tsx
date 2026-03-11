@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Plus, Edit, ArrowLeft, Trash2, Check, Image as ImageIcon, Link as LinkIcon, Eye, Code } from "lucide-react";
+import { Pagination } from "../components/Pagination";
 
 // --- ENUMS & INTERFACES ---
 enum BlogStatus {
@@ -9,12 +10,20 @@ enum BlogStatus {
   DELETED = "DELETED"
 }
 
+enum BlogCategory {
+  KNOWLEDGE = "Knowledge",
+  EVENT = "Event",
+  PROMOTION = "Promotion",
+  BANNER = "Banner"
+}
+
 type ThumbnailType = "URL" | "UPLOAD";
 
 interface Blog {
   id: string;
   title: string;
   content: string; // Lưu trữ HTML
+  category: BlogCategory;
   thumbnail: string;
   thumbnailType: ThumbnailType;
   author: string;
@@ -30,6 +39,9 @@ export function BlogManagement() {
   // States cho màn List
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // States cho màn Form (Detail/Update/Add)
   const [isEditMode, setIsEditMode] = useState(false); // Trạng thái Toggle Xem <-> Sửa
@@ -37,7 +49,7 @@ export function BlogManagement() {
   const [previewHtml, setPreviewHtml] = useState(false); // Toggle xem trước HTML khi đang edit
   
   const initialFormState: Partial<Blog> = {
-    title: "", content: "", thumbnail: "", thumbnailType: "URL", status: BlogStatus.DRAFT
+    title: "", content: "", category: BlogCategory.KNOWLEDGE, thumbnail: "", thumbnailType: "URL", status: BlogStatus.DRAFT
   };
   const [formData, setFormData] = useState<Partial<Blog>>(initialFormState);
 
@@ -47,6 +59,7 @@ export function BlogManagement() {
       id: "BLG-001",
       title: "The Art of Roasting: Finding the Perfect Profile",
       content: "<h2>Introduction</h2><p>Roasting coffee is a delicate balance of temperature and time...</p><h3>First Crack</h3><p>The first crack signifies the bean expanding...</p>",
+      category: BlogCategory.KNOWLEDGE,
       thumbnail: "https://images.unsplash.com/photo-1611162458324-aae1eb4129a4?w=800&q=80",
       thumbnailType: "URL",
       author: "CEO Admin",
@@ -58,6 +71,7 @@ export function BlogManagement() {
       id: "BLG-002",
       title: "Arabica vs Robusta: What you need to know for wholesale",
       content: "<h2>Key Differences</h2><p>Arabica beans are known for their sweetness, while Robusta provides body and crema...</p>",
+      category: BlogCategory.KNOWLEDGE,
       thumbnail: "https://images.unsplash.com/photo-1559525839-b184a4d698c7?w=800&q=80",
       thumbnailType: "URL",
       author: "Sale Manager",
@@ -69,12 +83,25 @@ export function BlogManagement() {
       id: "BLG-003",
       title: "Holiday Promotion Announcement 2026",
       content: "<h2>Special Offers</h2><p>Get ready for our biggest B2B discounts of the year...</p>",
+      category: BlogCategory.PROMOTION,
       thumbnail: "",
       thumbnailType: "UPLOAD",
       author: "CEO Admin",
       status: BlogStatus.ARCHIVED,
       created_at: "2025-12-01 08:00",
       updated_at: "2026-01-15 10:00"
+    },
+    {
+      id: "BLG-004",
+      title: "Katak Coffee at Vietnam Coffee Expo 2026",
+      content: "<h2>Join Us</h2><p>We are thrilled to announce our participation in this year's Expo...</p>",
+      category: BlogCategory.EVENT,
+      thumbnail: "https://images.unsplash.com/photo-1511920170033-f8396924c348?w=800&q=80",
+      thumbnailType: "URL",
+      author: "Marketing Team",
+      status: BlogStatus.PUBLISHED,
+      created_at: "2026-02-20 09:00",
+      updated_at: "2026-02-20 09:00"
     }
   ]);
 
@@ -133,6 +160,11 @@ export function BlogManagement() {
     }
   };
 
+  // Reset pagination on filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, categoryFilter]);
+
   // --- RENDER HELPERS ---
   const getStatusDisplay = (status: BlogStatus) => {
     let borderStyle = "border-black text-black";
@@ -154,8 +186,12 @@ export function BlogManagement() {
     const filteredBlogs = blogs.filter(b => 
       b.status !== BlogStatus.DELETED && // Ẩn các bài đã xóa khỏi view mặc định
       (statusFilter === "ALL" || b.status === statusFilter) &&
+      (categoryFilter === "ALL" || b.category === categoryFilter) &&
       (b.title.toLowerCase().includes(searchTerm.toLowerCase()) || b.author.toLowerCase().includes(searchTerm.toLowerCase()))
     );
+
+    const totalPages = Math.max(1, Math.ceil(filteredBlogs.length / itemsPerPage));
+    const paginatedBlogs = filteredBlogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     return (
       <div className="bg-white text-black pb-10">
@@ -186,6 +222,16 @@ export function BlogManagement() {
           </div>
           <select 
             className="border border-black px-3 py-2 text-xs font-bold uppercase outline-none bg-white focus:border-2 transition-all"
+            value={categoryFilter} 
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="ALL">All Categories</option>
+            {Object.values(BlogCategory).map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+          <select 
+            className="border border-black px-3 py-2 text-xs font-bold uppercase outline-none bg-white focus:border-2 transition-all"
             value={statusFilter} 
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -197,12 +243,12 @@ export function BlogManagement() {
         </div>
 
         {/* Table */}
-        <div className="border border-black">
+        <div className="border border-black mb-6">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b-2 border-black">
                 <th className="p-3 text-[10px] font-black uppercase tracking-widest border-r border-black w-16 text-center">Thumb</th>
-                <th className="p-3 text-[10px] font-black uppercase tracking-widest border-r border-black">Article Title</th>
+                <th className="p-3 text-[10px] font-black uppercase tracking-widest border-r border-black">Article Title & Category</th>
                 <th className="p-3 text-[10px] font-black uppercase tracking-widest border-r border-black w-32">Author</th>
                 <th className="p-3 text-[10px] font-black uppercase tracking-widest border-r border-black w-32">Last Updated</th>
                 <th className="p-3 text-[10px] font-black uppercase tracking-widest border-r border-black w-28 text-center">Status</th>
@@ -210,10 +256,10 @@ export function BlogManagement() {
               </tr>
             </thead>
             <tbody>
-              {filteredBlogs.length === 0 ? (
+              {paginatedBlogs.length === 0 ? (
                 <tr><td colSpan={6} className="p-8 text-center text-xs font-bold uppercase text-gray-500 border-t border-black">No articles found.</td></tr>
               ) : (
-                filteredBlogs.map((blog) => (
+                paginatedBlogs.map((blog) => (
                   <tr key={blog.id} className="border-b border-black hover:bg-gray-50 transition-colors">
                     <td className="p-2 border-r border-black text-center">
                       {blog.thumbnail ? (
@@ -228,7 +274,10 @@ export function BlogManagement() {
                     </td>
                     <td className="p-3 border-r border-black">
                       <p className="text-sm font-bold">{blog.title}</p>
-                      <p className="text-[10px] font-mono text-gray-500 mt-1">ID: {blog.id}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[9px] font-bold uppercase border border-black px-1 text-gray-600">{blog.category}</span>
+                        <span className="text-[10px] font-mono text-gray-500">ID: {blog.id}</span>
+                      </div>
                     </td>
                     <td className="p-3 border-r border-black text-xs font-bold uppercase">{blog.author}</td>
                     <td className="p-3 border-r border-black text-xs font-mono">{blog.updated_at.split(" ")[0]}</td>
@@ -249,6 +298,15 @@ export function BlogManagement() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination (Always render as requested) */}
+        <Pagination 
+          currentPage={currentPage} 
+          totalPages={totalPages} 
+          totalItems={filteredBlogs.length} 
+          itemsPerPage={itemsPerPage} 
+          onPageChange={setCurrentPage} 
+        />
       </div>
     );
   }
@@ -313,6 +371,9 @@ export function BlogManagement() {
               {getStatusDisplay(formData.status as BlogStatus)}
             </div>
             
+            <div className="mb-2">
+              <span className="text-[10px] font-bold uppercase border border-black px-2 py-1 bg-gray-50">{formData.category}</span>
+            </div>
             <h1 className="text-3xl font-black mb-4 leading-tight">{formData.title}</h1>
             
             <div className="flex gap-4 text-xs font-mono border-b border-black pb-4 mb-6 uppercase">
@@ -339,16 +400,30 @@ export function BlogManagement() {
             {/* Left Column: Form Inputs */}
             <div className="lg:col-span-2 space-y-6">
               
-              {/* Title */}
-              <div>
-                <label className="block text-xs font-bold uppercase mb-2">Article Title *</label>
-                <input 
-                  type="text" 
-                  value={formData.title} 
-                  onChange={(e) => setFormData({...formData, title: e.target.value})} 
-                  placeholder="Enter a captivating title..."
-                  className="w-full p-3 border-2 border-black text-lg font-bold outline-none focus:border-dashed transition-all" 
-                />
+              {/* Title & Category */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="md:col-span-3">
+                  <label className="block text-xs font-bold uppercase mb-2">Article Title *</label>
+                  <input 
+                    type="text" 
+                    value={formData.title} 
+                    onChange={(e) => setFormData({...formData, title: e.target.value})} 
+                    placeholder="Enter a captivating title..."
+                    className="w-full p-3 border-2 border-black text-lg font-bold outline-none focus:border-dashed transition-all" 
+                  />
+                </div>
+                <div className="md:col-span-1">
+                  <label className="block text-xs font-bold uppercase mb-2">Category *</label>
+                  <select 
+                    value={formData.category}
+                    onChange={(e) => setFormData({...formData, category: e.target.value as BlogCategory})}
+                    className="w-full p-3 border-2 border-black text-sm font-bold uppercase outline-none focus:border-dashed transition-all bg-white"
+                  >
+                    {Object.values(BlogCategory).map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* HTML Content Editor (Wireframe level config) */}
