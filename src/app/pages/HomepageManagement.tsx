@@ -2,20 +2,10 @@ import React, { useState } from "react";
 import { Image as ImageIcon, Link as LinkIcon, Plus, Edit2, Trash2, LayoutTemplate, X, Search, CheckCircle } from "lucide-react";
 
 // --- INTERFACES ---
-interface HomepageBanner {
-  imageUrl: string;
-  linkUrl: string;
-}
-
 interface ProductSlot {
   id: string;
   name: string;
   price: number;
-  imageUrl: string;
-}
-
-interface KatakStory {
-  content: string;
   imageUrl: string;
 }
 
@@ -25,33 +15,38 @@ interface BlogSlot {
   date: string;
 }
 
-type ModalType = "FEATURED" | "BEST_SELLER" | "BLOG" | null;
+type ModalType = "HERO_BANNER" | "FEATURED" | "STORY" | "BEST_SELLER" | "BLOG" | null;
 
 export function HomepageManagement() {
   // --- STATES ---
-  const [banners, setBanners] = useState<HomepageBanner[]>([
-    { imageUrl: "https://images.unsplash.com/photo-1497935586351-b67a49e012bf?auto=format&fit=crop&q=80&w=1200&h=400", linkUrl: "/shop/all" },
-    { imageUrl: "", linkUrl: "" },
-    { imageUrl: "", linkUrl: "" }
+  
+  // 1. Hero Banners (Exactly 3 slots, uses Blog data)
+  const [heroBanners, setHeroBanners] = useState<(BlogSlot | null)[]>([
+    { id: "BLG-01", title: "The Art of Pour Over", date: "2026-02-25" },
+    null,
+    null
   ]);
 
+  // 2. Featured Collection
   const [featured, setFeatured] = useState<(ProductSlot | null)[]>([
     { id: "PROD-01", name: "Arabica Premium", price: 262500, imageUrl: "image-url" },
     null,
     null
   ]);
 
-  const [story, setStory] = useState<KatakStory>({
-    content: "Welcome to our coffee bean store, where passion meets quality in every roast. We source premium beans from trusted farms around the world...",
-    imageUrl: "https://images.unsplash.com/photo-1611162458324-aae1eb4129a4?auto=format&fit=crop&q=80&w=600&h=400"
-  });
+  // 3. Katak Story (Exactly 1 slot, uses Blog data)
+  const [story, setStory] = useState<(BlogSlot | null)[]>([
+    { id: "BLG-03", title: "Farm to Cup: Our Journey", date: "2026-03-10" }
+  ]);
 
+  // 4. Best Seller
   const [bestSellers, setBestSellers] = useState<(ProductSlot | null)[]>([
     null, null, null
   ]);
 
+  // 5. Coffee Culture / Blogs
   const [blogs, setBlogs] = useState<(BlogSlot | null)[]>([
-    { id: "BLG-01", title: "The Art of Pour Over", date: "2026-02-25" },
+    { id: "BLG-02", title: "Understanding Roast Levels", date: "2026-03-01" },
     null,
     null
   ]);
@@ -75,18 +70,13 @@ export function HomepageManagement() {
     { id: "BLG-02", title: "Understanding Roast Levels", date: "2026-03-01" },
     { id: "BLG-03", title: "Farm to Cup: Our Journey", date: "2026-03-10" },
     { id: "BLG-04", title: "Water Temperature Matters", date: "2026-03-15" },
+    { id: "BLG-05", title: "Holiday Promo 2026", date: "2026-03-20" },
   ];
 
   // --- HANDLERS ---
   const handleSave = () => {
     setToastMessage("SYS_MSG: LAYOUT_SAVED_SUCCESSFULLY");
     setTimeout(() => setToastMessage(null), 3000);
-  };
-
-  const updateBanner = (index: number, field: keyof HomepageBanner, value: string) => {
-    const newBanners = [...banners];
-    newBanners[index] = { ...newBanners[index], [field]: value };
-    setBanners(newBanners);
   };
 
   const openSelector = (type: ModalType, index: number) => {
@@ -96,8 +86,12 @@ export function HomepageManagement() {
 
   const selectItem = (item: any) => {
     const { type, slotIndex } = selectorModal;
-    if (type === "FEATURED") {
+    if (type === "HERO_BANNER") {
+      const newArr = [...heroBanners]; newArr[slotIndex] = item; setHeroBanners(newArr);
+    } else if (type === "FEATURED") {
       const newArr = [...featured]; newArr[slotIndex] = item; setFeatured(newArr);
+    } else if (type === "STORY") {
+      const newArr = [...story]; newArr[slotIndex] = item; setStory(newArr);
     } else if (type === "BEST_SELLER") {
       const newArr = [...bestSellers]; newArr[slotIndex] = item; setBestSellers(newArr);
     } else if (type === "BLOG") {
@@ -106,9 +100,13 @@ export function HomepageManagement() {
     setSelectorModal({ type: null, slotIndex: -1 });
   };
 
-  const removeItem = (type: "FEATURED" | "BEST_SELLER" | "BLOG", index: number) => {
-    if (type === "FEATURED") {
+  const removeItem = (type: ModalType, index: number) => {
+    if (type === "HERO_BANNER") {
+      const newArr = [...heroBanners]; newArr[index] = null; setHeroBanners(newArr);
+    } else if (type === "FEATURED") {
       const newArr = [...featured]; newArr[index] = null; setFeatured(newArr);
+    } else if (type === "STORY") {
+      const newArr = [...story]; newArr[index] = null; setStory(newArr);
     } else if (type === "BEST_SELLER") {
       const newArr = [...bestSellers]; newArr[index] = null; setBestSellers(newArr);
     } else if (type === "BLOG") {
@@ -133,8 +131,9 @@ export function HomepageManagement() {
     );
   };
 
-  const renderSlot = (item: any, type: "FEATURED" | "BEST_SELLER" | "BLOG", index: number) => {
+  const renderSlot = (item: any, type: NonNullable<ModalType>, index: number) => {
     const isEmpty = item === null;
+    const isBlogType = type === "HERO_BANNER" || type === "STORY" || type === "BLOG";
 
     return (
       <div key={`${type}-${index}`} className={`border p-4 h-48 flex flex-col justify-between transition-none ${isEmpty ? 'border-dashed border-black' : 'border-black'}`}>
@@ -160,7 +159,7 @@ export function HomepageManagement() {
                 <span className="text-xs font-bold uppercase flex items-center gap-1"><Edit2 size={12}/> CHANGE_ITEM</span>
               </div>
             </div>
-            {type === "BLOG" ? (
+            {isBlogType ? (
               <>
                 <p className="text-sm font-bold truncate uppercase">{item.title}</p>
                 <p className="text-[10px] mt-1">DATE: {item.date}</p>
@@ -207,55 +206,14 @@ export function HomepageManagement() {
 
       <div className="max-w-5xl mx-auto space-y-16 px-8">
         
-        {/* 1. HERO BANNERS */}
+        {/* 1. HERO BANNERS (Modified to use Blog selection) */}
         <section>
           <div className="mb-4 flex items-center justify-between border-b border-black pb-2">
             <h2 className="text-base font-bold uppercase tracking-widest">1. HERO_BANNERS [CAROUSEL]</h2>
-            <span className="text-[10px] uppercase font-bold tracking-widest border border-black px-3 py-1">3 SLOTS</span>
+            <span className="text-[10px] uppercase font-bold tracking-widest border border-black px-3 py-1">3 SLOTS (USES BLOG DATA)</span>
           </div>
-          
-          <div className="space-y-6">
-            {banners.map((banner, index) => (
-              <div key={index} className="border border-black p-4 bg-white flex flex-col md:flex-row gap-6">
-                
-                {/* Visual Preview */}
-                <div className="w-full md:w-1/3 border border-black border-dashed h-40 relative flex flex-col items-center justify-center overflow-hidden bg-white shrink-0">
-                  <WireframeImagePlaceholder imageUrl={banner.imageUrl} text={`BANNER_IMG_${index + 1}`} />
-                  <div className="absolute bottom-2 right-2 bg-white px-2 py-1 text-[10px] border border-black font-bold">
-                    IDX_{index}
-                  </div>
-                </div>
-
-                {/* Inputs */}
-                <div className="flex-1 flex flex-col justify-center space-y-4">
-                  <div>
-                    <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest mb-1">
-                      <ImageIcon size={14}/> IMAGE_URL
-                    </label>
-                    <input 
-                      type="text" 
-                      value={banner.imageUrl} 
-                      onChange={e => updateBanner(index, 'imageUrl', e.target.value)}
-                      className="w-full p-2 border border-black text-xs outline-none focus:bg-black focus:text-white transition-none"
-                      placeholder="HTTPS://..."
-                    />
-                  </div>
-                  <div>
-                    <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest mb-1">
-                      <LinkIcon size={14}/> DESTINATION_LINK
-                    </label>
-                    <input 
-                      type="text" 
-                      value={banner.linkUrl} 
-                      onChange={e => updateBanner(index, 'linkUrl', e.target.value)}
-                      className="w-full p-2 border border-black text-xs outline-none focus:bg-black focus:text-white transition-none"
-                      placeholder="/URL/PATH"
-                    />
-                  </div>
-                </div>
-
-              </div>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {heroBanners.map((item, idx) => renderSlot(item, "HERO_BANNER", idx))}
           </div>
         </section>
 
@@ -270,34 +228,15 @@ export function HomepageManagement() {
           </div>
         </section>
 
-        {/* 3. BRAND STORY */}
+        {/* 3. BRAND STORY (Modified to use Blog selection) */}
         <section>
           <div className="mb-4 flex items-center justify-between border-b border-black pb-2">
             <h2 className="text-base font-bold uppercase tracking-widest">3. BRAND_STORY_BLOCK</h2>
+            <span className="text-[10px] uppercase font-bold tracking-widest border border-black px-3 py-1">1 SLOT (USES BLOG DATA)</span>
           </div>
-          <div className="border border-black p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-widest mb-2">STORY_CONTENT_TEXT</label>
-              <textarea 
-                value={story.content}
-                onChange={e => setStory({...story, content: e.target.value})}
-                className="w-full p-4 border border-black text-xs h-full min-h-[200px] outline-none focus:bg-black focus:text-white transition-none leading-relaxed resize-none uppercase"
-              />
-            </div>
-            <div className="flex flex-col">
-              <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest mb-2">
-                <ImageIcon size={14}/> IMAGE_SOURCE_URL
-              </label>
-              <input 
-                type="text" 
-                value={story.imageUrl} 
-                onChange={e => setStory({...story, imageUrl: e.target.value})}
-                className="w-full p-2 border border-black text-xs outline-none focus:bg-black focus:text-white transition-none mb-4"
-              />
-              <div className="flex-1 border border-black border-dashed relative flex items-center justify-center overflow-hidden min-h-[160px] bg-white">
-                <WireframeImagePlaceholder imageUrl={story.imageUrl} text="STORY_IMG" />
-              </div>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Story now only uses 1 slot based on the array length we set in state */}
+            {story.map((item, idx) => renderSlot(item, "STORY", idx))}
           </div>
         </section>
 
@@ -353,7 +292,8 @@ export function HomepageManagement() {
             <div className="border border-black overflow-y-auto flex-1 bg-white">
               <table className="w-full text-left border-collapse">
                 <tbody>
-                  {(selectorModal.type === "BLOG" ? mockBlogs : mockProducts)
+                  {/* Determine data source based on slot type */}
+                  {(["HERO_BANNER", "STORY", "BLOG"].includes(selectorModal.type) ? mockBlogs : mockProducts)
                     .filter((item: any) => 
                       item.id.toLowerCase().includes(searchQuery.toLowerCase()) || 
                       (item.name || item.title).toLowerCase().includes(searchQuery.toLowerCase())
@@ -372,7 +312,7 @@ export function HomepageManagement() {
                   ))}
                   
                   {/* Empty State */}
-                  {(selectorModal.type === "BLOG" ? mockBlogs : mockProducts).filter((item: any) => 
+                  {(["HERO_BANNER", "STORY", "BLOG"].includes(selectorModal.type) ? mockBlogs : mockProducts).filter((item: any) => 
                       item.id.toLowerCase().includes(searchQuery.toLowerCase()) || 
                       (item.name || item.title).toLowerCase().includes(searchQuery.toLowerCase())
                     ).length === 0 && (
