@@ -16,7 +16,7 @@ interface MaterialMaster {
   id: string;
   name: string;
   category: string;
-  unit: string;
+  origin: string; // Đã đổi từ 'unit' sang 'origin'
   description: string;
   sensoryData?: SensoryData;
 }
@@ -59,14 +59,14 @@ export function Materials() {
   // --- MOCK DATA ---
   const [materialMasters, setMaterialMasters] = useState<MaterialMaster[]>([
     { 
-      id: "MAT-M001", name: "Arabica Green Beans", category: "Coffee Beans", unit: "Kg", description: "Premium Arabica green coffee beans", 
+      id: "MAT-M001", name: "Arabica Green Beans", category: "Coffee Beans", origin: "Cầu Đất, Lâm Đồng", description: "Premium Arabica green coffee beans", 
       sensoryData: { bitter: 3, sweet: 7, sour: 6, body: 4, caffein: 1.5, flavor: "Floral, Citrus, Caramel" } 
     },
     { 
-      id: "MAT-M002", name: "Robusta Green Beans", category: "Coffee Beans", unit: "Kg", description: "High-quality Robusta beans",
+      id: "MAT-M002", name: "Robusta Green Beans", category: "Coffee Beans", origin: "Buôn Ma Thuột, Đắk Lắk", description: "High-quality Robusta beans",
       sensoryData: { bitter: 8, sweet: 2, sour: 2, body: 9, caffein: 2.7, flavor: "Dark Chocolate, Earthy, Woody" }
     },
-    { id: "MAT-M003", name: "Culi Green Beans", category: "Coffee Beans", unit: "Kg", description: "High-quality Culi Beans" },
+    { id: "MAT-M003", name: "Culi Green Beans", category: "Coffee Beans", origin: "Đắk Mil, Đắk Nông", description: "High-quality Culi Beans" },
   ]);
 
   const [batches, setBatches] = useState<MaterialBatch[]>([
@@ -83,7 +83,7 @@ export function Materials() {
   };
 
   // --- FORM STATES ---
-  const [newMaterial, setNewMaterial] = useState<MaterialMaster>({ id: "", name: "", category: "", unit: "Kg", description: "" });
+  const [newMaterial, setNewMaterial] = useState<MaterialMaster>({ id: "", name: "", category: "", origin: "", description: "" });
   const [importData, setImportData] = useState({ materialId: "", supplier: "", qty: "", unitPrice: "", importDate: new Date().toISOString().split("T")[0], expiryDate: "" });
   const [exportData, setExportData] = useState({ materialId: "", batchId: "", type: "Production", qty: "", reference: "", exportDate: new Date().toISOString().split("T")[0] });
 
@@ -91,7 +91,7 @@ export function Materials() {
   const handleAddMaterial = () => {
     setEditingMaterial(null);
     setCurrentMaterialSensory({ ...defaultSensory });
-    setNewMaterial({ id: `MAT-M${String(materialMasters.length + 1).padStart(3, "0")}`, name: "", category: "", unit: "Kg", description: "" });
+    setNewMaterial({ id: `MAT-M${String(materialMasters.length + 1).padStart(3, "0")}`, name: "", category: "", origin: "", description: "" });
     setViewMode("ADD_MATERIAL");
     setIsEditable(true);
   };
@@ -182,7 +182,7 @@ export function Materials() {
     <div className="bg-white text-black min-h-screen">
       
       {/* =========================================
-          MÀN HÌNH 1: DANH SÁCH MATERIAL MASTER
+         MÀN HÌNH 1: DANH SÁCH MATERIAL MASTER
       ========================================= */}
       {viewMode === "LIST" && (
         <>
@@ -229,8 +229,8 @@ export function Materials() {
                   <th className="px-4 py-3 text-xs font-bold uppercase border-r border-black w-12 text-center">STT</th>
                   <th className="px-4 py-3 text-xs font-bold uppercase border-r border-black">Material ID</th>
                   <th className="px-4 py-3 text-xs font-bold uppercase border-r border-black">Name</th>
-                  <th className="px-4 py-3 text-xs font-bold uppercase border-r border-black">Category</th>
-                  <th className="px-4 py-3 text-xs font-bold uppercase border-r border-black text-right">Active Stock</th>
+                  <th className="px-4 py-3 text-xs font-bold uppercase border-r border-black">Origin</th>
+                  <th className="px-4 py-3 text-xs font-bold uppercase border-r border-black text-right">Active Stock (Kg)</th>
                   <th className="px-4 py-3 text-xs font-bold uppercase text-center">Actions</th>
                 </tr>
               </thead>
@@ -246,10 +246,10 @@ export function Materials() {
                         {material.name}
                         {material.sensoryData && <span className="ml-2 text-[10px] border border-black px-1 uppercase font-bold text-gray-500">Sensory ✓</span>}
                       </td>
-                      <td className="px-4 py-3 text-sm border-r border-black">{material.category}</td>
+                      <td className="px-4 py-3 text-sm border-r border-black">{material.origin || "-"}</td>
                       <td className="px-4 py-3 text-sm text-right border-r border-black font-mono font-bold">
                         <span className={hasStockWarning ? "text-red-600 flex items-center justify-end gap-1" : ""}>
-                          {hasStockWarning && <AlertCircle size={14} />} {totalStock} {material.unit}
+                          {hasStockWarning && <AlertCircle size={14} />} {totalStock}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm flex justify-center gap-2">
@@ -267,7 +267,7 @@ export function Materials() {
       )}
 
       {/* =========================================
-          MÀN HÌNH 2: BATCH DRILL-DOWN (INVENTORY)
+         MÀN HÌNH 2: BATCH DRILL-DOWN (INVENTORY)
       ========================================= */}
       {viewMode === "BATCHES" && selectedMaterialForBatches && (
         <div className="bg-white border-2 border-black p-6 w-full shadow-sm max-w-5xl mx-auto mt-4">
@@ -281,15 +281,15 @@ export function Materials() {
           <div className="space-y-4">
             <div className="flex gap-4 mb-2">
               <div className="p-3 border border-black bg-gray-50 flex-1">
+                <p className="text-xs uppercase font-bold text-gray-500">Origin / Source</p>
+                <p className="font-bold">{selectedMaterialForBatches.origin || "N/A"}</p>
+              </div>
+              <div className="p-3 border border-black bg-gray-50 flex-1">
                 <p className="text-xs uppercase font-bold text-gray-500">Category</p>
                 <p className="font-bold">{selectedMaterialForBatches.category}</p>
               </div>
-              <div className="p-3 border border-black bg-gray-50 flex-1">
-                <p className="text-xs uppercase font-bold text-gray-500">Unit of Measure</p>
-                <p className="font-bold">{selectedMaterialForBatches.unit}</p>
-              </div>
               <div className="p-3 border border-black bg-black text-white flex-1 text-right">
-                <p className="text-xs uppercase font-bold text-gray-400">Total Active Stock</p>
+                <p className="text-xs uppercase font-bold text-gray-400">Total Active Stock (Kg)</p>
                 <p className="font-bold text-2xl font-mono">{getTotalStock(selectedMaterialForBatches.id)}</p>
               </div>
             </div>
@@ -303,7 +303,7 @@ export function Materials() {
                     <th className="p-2 border-r border-black">Supplier</th>
                     <th className="p-2 border-r border-black">Import / Expiry</th>
                     <th className="p-2 border-r border-black text-right">Cost (₫)</th>
-                    <th className="p-2 border-r border-black text-right">Rem. Qty</th>
+                    <th className="p-2 border-r border-black text-right">Rem. Qty (Kg)</th>
                     <th className="p-2 border-r border-black text-center">Status</th>
                     <th className="p-2 text-center">Toggle Lock</th>
                   </tr>
@@ -349,7 +349,7 @@ export function Materials() {
       )}
 
       {/* =========================================
-          MÀN HÌNH 3: ADD/DETAIL/EDIT MATERIAL MASTER
+         MÀN HÌNH 3: ADD/DETAIL/EDIT MATERIAL MASTER
       ========================================= */}
       {(viewMode === "ADD_MATERIAL" || viewMode === "DETAIL_MATERIAL") && (
         <div className="bg-white border-2 border-black p-6 w-full shadow-sm max-w-5xl mx-auto mt-4">
@@ -374,10 +374,15 @@ export function Materials() {
                 <input type="text" value={newMaterial.id} readOnly className="w-full px-3 py-2 border border-black bg-gray-100 font-mono text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-bold uppercase mb-1">Unit of Measure *</label>
-                <select value={newMaterial.unit} onChange={(e) => setNewMaterial({ ...newMaterial, unit: e.target.value })} disabled={!isEditable} className={`w-full px-3 py-2 border border-black text-sm ${!isEditable ? 'bg-gray-100 opacity-80 cursor-not-allowed' : 'bg-white'}`}>
-                  <option value="Kg">Kg</option><option value="Pcs">Pcs</option><option value="Box">Box</option><option value="Liter">Liter</option>
-                </select>
+                <label className="block text-xs font-bold uppercase mb-1">Origin (Xuất xứ) *</label>
+                <input 
+                  type="text" 
+                  value={newMaterial.origin} 
+                  onChange={(e) => setNewMaterial({ ...newMaterial, origin: e.target.value })} 
+                  readOnly={!isEditable} 
+                  className={`w-full px-3 py-2 border border-black text-sm ${!isEditable ? 'bg-gray-100 outline-none' : ''}`} 
+                  placeholder="e.g., Cầu Đất, Lâm Đồng" 
+                />
               </div>
             </div>
             <div>
@@ -489,7 +494,7 @@ export function Materials() {
       )}
 
       {/* =========================================
-          MÀN HÌNH 4: IMPORT MATERIAL (CREATE BATCH)
+         MÀN HÌNH 4: IMPORT MATERIAL (CREATE BATCH)
       ========================================= */}
       {viewMode === "IMPORT" && (
         <div className="bg-white border-2 border-black p-6 w-full shadow-sm max-w-4xl mx-auto mt-4">
@@ -517,12 +522,12 @@ export function Materials() {
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase mb-1">Import Price (VNĐ) *</label>
-                <input type="number" value={importData.unitPrice} onChange={(e) => setImportData({ ...importData, unitPrice: e.target.value })} className="w-full px-3 py-2 border border-black text-sm font-mono" placeholder="Cost per unit" />
+                <input type="number" value={importData.unitPrice} onChange={(e) => setImportData({ ...importData, unitPrice: e.target.value })} className="w-full px-3 py-2 border border-black text-sm font-mono" placeholder="Cost per Kg" />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold uppercase mb-1">Quantity *</label>
+                <label className="block text-xs font-bold uppercase mb-1">Quantity (Kg) *</label>
                 <input type="number" value={importData.qty} onChange={(e) => setImportData({ ...importData, qty: e.target.value })} className="w-full px-3 py-2 border border-black text-sm font-mono" placeholder="Amount" />
               </div>
               <div>
@@ -543,7 +548,7 @@ export function Materials() {
       )}
 
       {/* =========================================
-          MÀN HÌNH 5: EXPORT MATERIAL (USE BATCH)
+         MÀN HÌNH 5: EXPORT MATERIAL (USE BATCH)
       ========================================= */}
       {viewMode === "EXPORT" && (
         <div className="bg-white border-2 border-black p-6 w-full shadow-sm max-w-4xl mx-auto mt-4">
@@ -586,7 +591,7 @@ export function Materials() {
                         <input type="radio" name="exportBatch" value={b.id} checked={exportData.batchId === b.id} onChange={(e) => setExportData({ ...exportData, batchId: e.target.value })} className="hidden" />
                         <div className="flex-1 flex justify-between items-center text-sm">
                           <span className="font-mono font-bold">{b.id}</span>
-                          <span className="font-mono">Rem: {b.remainingQty}</span>
+                          <span className="font-mono">Rem: {b.remainingQty} Kg</span>
                         </div>
                       </label>
                     ))}
@@ -597,7 +602,7 @@ export function Materials() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold uppercase mb-1">Deduct Quantity *</label>
+                <label className="block text-xs font-bold uppercase mb-1">Deduct Quantity (Kg) *</label>
                 <input type="number" value={exportData.qty} onChange={(e) => setExportData({ ...exportData, qty: e.target.value })} className="w-full px-3 py-2 border border-black text-sm font-mono" placeholder="Enter amount" />
               </div>
               <div>

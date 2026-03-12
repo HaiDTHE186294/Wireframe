@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Edit, Search, Eye, Ban, CheckCircle, AlertTriangle, X } from "lucide-react";
 import { Pagination } from "../components/Pagination";
 
@@ -6,10 +6,10 @@ interface Supplier {
   code: string;
   name: string;
   taxCode: string;
-  contact: string;
+  contact: string; // Sẽ lưu định dạng: "Tên người liên hệ - Số điện thoại"
   address?: string;
   email?: string;
-  status: "Active" | "Disabled"; // Thêm status
+  status: "Active" | "Disabled";
 }
 
 type ViewMode = "LIST" | "ADD" | "DETAIL";
@@ -21,9 +21,9 @@ export function Suppliers() {
   const [searchTerm, setSearchTerm] = useState("");
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([
-    { code: "SUP001", name: "Highland Coffee Suppliers", taxCode: "0123456789", contact: "+84 901 234 567", address: "Ha Noi", email: "highland@supplier.com", status: "Active" },
-    { code: "SUP002", name: "Vietnam Coffee Export Co.", taxCode: "0987654321", contact: "+84 902 345 678", address: "Ho Chi Minh", email: "export@vncoffee.com", status: "Active" },
-    { code: "SUP003", name: "Arabica Premium Ltd.", taxCode: "0111222333", contact: "+84 903 456 789", address: "Da Lat", email: "contact@arabica.com", status: "Disabled" },
+    { code: "SUP001", name: "Highland Coffee Suppliers", taxCode: "0123456789", contact: "Tran Van Binh - +84 901 234 567", address: "Ha Noi", email: "highland@supplier.com", status: "Active" },
+    { code: "SUP002", name: "Vietnam Coffee Export Co.", taxCode: "0987654321", contact: "Le Thi Hoa - +84 902 345 678", address: "Ho Chi Minh", email: "export@vncoffee.com", status: "Active" },
+    { code: "SUP003", name: "Arabica Premium Ltd.", taxCode: "0111222333", contact: "Pham Tuan - +84 903 456 789", address: "Da Lat", email: "contact@arabica.com", status: "Disabled" },
   ]);
 
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
@@ -31,22 +31,37 @@ export function Suppliers() {
     code: "", name: "", taxCode: "", contact: "", address: "", email: "", status: "Active"
   });
 
+  // States tạm để tách Name và Phone trên UI Form (Không lưu DB riêng)
+  const [contactName, setContactName] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+
   // --- STATUS MODAL STATES ---
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [supplierToToggle, setSupplierToToggle] = useState<Supplier | null>(null);
 
   // --- FILTER & PAGINATION ---
   const filteredSuppliers = suppliers.filter(s => 
-    s.name.toLowerCase().includes(searchTerm.toLowerCase())
+    s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    s.code.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  const totalPages = Math.ceil(filteredSuppliers.length / itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(filteredSuppliers.length / itemsPerPage));
   const paginatedSuppliers = filteredSuppliers.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
+
+  // --- HELPERS FOR CONTACT FIELD ---
+  // Hàm này bóc tách chuỗi "Tên - SĐT" từ DB thành 2 phần để hiển thị
+  const parseContact = (contactStr: string) => {
+    const parts = contactStr.split(" - ");
+    if (parts.length > 1) {
+      return { name: parts[0], phone: parts[1] };
+    }
+    return { name: "N/A", phone: contactStr }; // Fallback nếu dữ liệu cũ chưa đúng chuẩn
+  };
 
   // --- HANDLERS ---
   const handleAddSupplier = () => {
@@ -55,6 +70,8 @@ export function Suppliers() {
       code: `SUP${String(suppliers.length + 1).padStart(3, "0")}`,
       name: "", taxCode: "", contact: "", address: "", email: "", status: "Active"
     });
+    setContactName("");
+    setContactPhone("");
     setIsEditable(true);
     setViewMode("ADD");
   };
@@ -62,15 +79,25 @@ export function Suppliers() {
   const handleViewSupplier = (supplier: Supplier) => {
     setEditingSupplier(supplier);
     setNewSupplier({ ...supplier });
+    
+    // Tách contact string ra 2 state tạm để binding vào input
+    const parsed = parseContact(supplier.contact);
+    setContactName(parsed.name === "N/A" ? "" : parsed.name);
+    setContactPhone(parsed.phone);
+
     setIsEditable(false);
     setViewMode("DETAIL");
   };
 
   const handleSaveSupplier = () => {
+    // Ghép Name và Phone lại thành 1 chuỗi để lưu vào DB (field: contact)
+    const combinedContact = `${contactName.trim()} - ${contactPhone.trim()}`;
+    const supplierToSave = { ...newSupplier, contact: combinedContact };
+
     if (editingSupplier) {
-      setSuppliers(suppliers.map(s => s.code === editingSupplier.code ? newSupplier : s));
+      setSuppliers(suppliers.map(s => s.code === editingSupplier.code ? supplierToSave : s));
     } else {
-      setSuppliers([...suppliers, newSupplier]);
+      setSuppliers([...suppliers, supplierToSave]);
     }
     setViewMode("LIST");
     setIsEditable(false);
@@ -79,6 +106,9 @@ export function Suppliers() {
   const handleCancelForm = () => {
     if (viewMode === "DETAIL" && isEditable && editingSupplier) {
       setNewSupplier({ ...editingSupplier });
+      const parsed = parseContact(editingSupplier.contact);
+      setContactName(parsed.name === "N/A" ? "" : parsed.name);
+      setContactPhone(parsed.phone);
       setIsEditable(false);
     } else {
       setViewMode("LIST");
@@ -111,14 +141,14 @@ export function Suppliers() {
       {/* ================= MÀN HÌNH 1: LIST ================= */}
       {viewMode === "LIST" && (
         <>
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-black">
+          <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-black">
             <div>
               <h1 className="text-2xl font-black uppercase tracking-tighter">Suppliers</h1>
-              <p className="text-sm font-bold text-gray-600 mt-1 uppercase tracking-widest">Partner Directory</p>
+              <p className="text-sm font-bold text-gray-600 mt-1 uppercase tracking-widest">Partner Directory & Contacts</p>
             </div>
             <button
               onClick={handleAddSupplier}
-              className="px-4 py-2 border border-black bg-black text-white hover:bg-gray-800 flex items-center gap-2 text-sm font-bold uppercase"
+              className="px-4 py-2 border border-black bg-black text-white hover:bg-gray-800 flex items-center gap-2 text-sm font-bold uppercase transition-colors"
             >
               <Plus size={16} />
               Add Supplier
@@ -130,88 +160,92 @@ export function Suppliers() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
               <input
                 type="text"
-                placeholder="Search supplier by name..."
-                className="w-full pl-9 pr-4 py-2 border border-black text-sm outline-none focus:ring-1 focus:ring-black bg-white"
+                placeholder="SEARCH SUPPLIER NAME OR CODE..."
+                className="w-full pl-9 pr-4 py-2 border border-black text-sm font-bold uppercase placeholder:font-normal outline-none focus:ring-1 focus:ring-black bg-white"
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               />
             </div>
             <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
-              {filteredSuppliers.length} Suppliers Found
+              {filteredSuppliers.length} Records Found
             </p>
           </div>
 
-          <div className="border border-black bg-white">
+          <div className="border border-black bg-white mb-4">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-black bg-gray-50">
-                  <th className="px-4 py-3 text-left text-xs font-bold uppercase border-r border-black w-12 text-center">STT</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold uppercase border-r border-black">Supplier Code</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold uppercase border-r border-black">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold uppercase border-r border-black">Tax Code</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold uppercase border-r border-black">Contact</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold uppercase border-r border-black">Status</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold uppercase">Actions</th>
+                <tr className="border-b border-black bg-gray-100">
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider border-r border-black w-12 text-center">STT</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider border-r border-black w-32">Supplier Code</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider border-r border-black">Company Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider border-r border-black w-48">Contact Person</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider border-r border-black w-40">Phone Number</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider border-r border-black w-24">Status</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider w-28">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedSuppliers.length === 0 ? (
-                  <tr><td colSpan={7} className="p-8 text-center text-sm italic text-gray-500">No suppliers found.</td></tr>
+                  <tr><td colSpan={7} className="p-8 text-center text-sm font-bold uppercase tracking-widest text-gray-500">NULL_RESULT</td></tr>
                 ) : (
-                  paginatedSuppliers.map((supplier, index) => (
-                    <tr
-                      key={supplier.code}
-                      className={`border-b border-black hover:bg-gray-50 transition-colors ${supplier.status === 'Disabled' ? 'opacity-60 bg-gray-100' : 'bg-white'}`}
-                    >
-                      <td className="px-4 py-3 text-sm text-center border-r border-black text-gray-500">{(currentPage - 1) * itemsPerPage + index + 1}</td>
-                      <td className="px-4 py-3 text-sm font-bold font-mono border-r border-black">{supplier.code}</td>
-                      <td className="px-4 py-3 text-sm font-bold border-r border-black">{supplier.name}</td>
-                      <td className="px-4 py-3 text-sm border-r border-black font-mono">{supplier.taxCode}</td>
-                      <td className="px-4 py-3 text-sm border-r border-black font-mono">{supplier.contact}</td>
-                      <td className="px-4 py-3 border-r border-black text-center">
-                        <span className={`px-2 py-0.5 border text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 w-fit mx-auto ${supplier.status === 'Active' ? 'border-black bg-white text-black' : 'border-gray-400 bg-gray-200 text-gray-500'}`}>
-                          {supplier.status === 'Active' ? <CheckCircle size={10} /> : <Ban size={10} />}
-                          {supplier.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-center">
-                        <div className="flex justify-center gap-2">
-                          <button
-                            onClick={() => handleViewSupplier(supplier)}
-                            className="p-1.5 border border-black bg-white hover:bg-gray-100"
-                            title="View/Edit Detail"
-                          >
-                            <Eye size={14} />
-                          </button>
-                          <button
-                            onClick={() => requestToggleStatus(supplier)}
-                            className={`p-1.5 border border-black hover:bg-gray-100 transition-colors ${supplier.status === 'Disabled' ? 'bg-black text-white hover:invert' : 'bg-white text-black'}`}
-                            title={supplier.status === "Active" ? "Disable Supplier" : "Enable Supplier"}
-                          >
-                            <Ban size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  paginatedSuppliers.map((supplier, index) => {
+                    // Extract name and phone from the single contact field
+                    const parsedContact = parseContact(supplier.contact);
+                    
+                    return (
+                      <tr
+                        key={supplier.code}
+                        className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${supplier.status === 'Disabled' ? 'opacity-60 bg-gray-100' : 'bg-white'}`}
+                      >
+                        <td className="px-4 py-3 text-sm text-center border-r border-black text-gray-500 font-mono">{(currentPage - 1) * itemsPerPage + index + 1}</td>
+                        <td className="px-4 py-3 text-sm font-bold font-mono border-r border-black">{supplier.code}</td>
+                        <td className="px-4 py-3 text-sm font-bold border-r border-black">{supplier.name}</td>
+                        <td className="px-4 py-3 text-sm border-r border-black font-semibold text-gray-700">{parsedContact.name}</td>
+                        <td className="px-4 py-3 text-sm border-r border-black font-mono">{parsedContact.phone}</td>
+                        <td className="px-4 py-3 border-r border-black text-center">
+                          <span className={`px-2 py-0.5 border text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 w-fit mx-auto ${supplier.status === 'Active' ? 'border-black bg-white text-black' : 'border-gray-400 bg-gray-200 text-gray-500'}`}>
+                            {supplier.status === 'Active' ? <CheckCircle size={10} /> : <Ban size={10} />}
+                            {supplier.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-center">
+                          <div className="flex justify-center gap-2">
+                            <button
+                              onClick={() => handleViewSupplier(supplier)}
+                              className="p-1.5 border border-black bg-white hover:bg-gray-100"
+                              title="View/Edit Detail"
+                            >
+                              <Eye size={14} />
+                            </button>
+                            <button
+                              onClick={() => requestToggleStatus(supplier)}
+                              className={`p-1.5 border border-black hover:bg-gray-100 transition-colors ${supplier.status === 'Disabled' ? 'bg-black text-white hover:invert' : 'bg-white text-black'}`}
+                              title={supplier.status === "Active" ? "Disable Supplier" : "Enable Supplier"}
+                            >
+                              <Ban size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
-            {filteredSuppliers.length > 0 && (
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                totalItems={filteredSuppliers.length}
-                itemsPerPage={itemsPerPage}
-                onPageChange={setCurrentPage}
-              />
-            )}
           </div>
+          
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredSuppliers.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+          />
 
           {/* --- MODAL: CONFIRM TOGGLE STATUS --- */}
           {showStatusModal && supplierToToggle && (
-            <div className="fixed inset-0 bg-white bg-opacity-90 z-50 flex items-center justify-center p-4" onClick={() => setShowStatusModal(false)}>
-              <div className="bg-white border-2 border-black p-8 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="fixed inset-0 bg-white/90 z-50 flex items-center justify-center p-4" onClick={() => setShowStatusModal(false)}>
+              <div className="bg-white border-2 border-black p-8 max-w-md w-full shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center gap-3 mb-4 border-b-2 border-black pb-4">
                   <AlertTriangle size={24} className="text-black" />
                   <h2 className="font-black text-xl uppercase tracking-tighter">Confirm Action</h2>
@@ -244,7 +278,7 @@ export function Suppliers() {
           <div className="flex items-center justify-between mb-8 pb-4 border-b-2 border-black">
             <div className="flex items-center gap-4">
               <h2 className="text-2xl font-black uppercase tracking-tighter">
-                {viewMode === "ADD" ? "Add Supplier" : "Supplier Details"}
+                {viewMode === "ADD" ? "Add Supplier Profile" : "Supplier Details"}
               </h2>
               {viewMode === "DETAIL" && !isEditable && (
                 <button onClick={() => setIsEditable(true)} className="px-3 py-1 border border-black bg-white hover:bg-gray-100 flex items-center gap-1 text-sm font-bold uppercase tracking-wider transition-colors">
@@ -257,95 +291,121 @@ export function Suppliers() {
             </button>
           </div>
 
-          <div className="space-y-6">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-2">
-               <h3 className="text-sm font-black uppercase tracking-widest text-gray-500">Business Information</h3>
-               {viewMode === "DETAIL" && (
-                 <span className={`px-2 py-1 border text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 w-fit ${newSupplier.status === 'Active' ? 'border-black bg-black text-white' : 'border-gray-400 bg-gray-100 text-gray-500'}`}>
-                   {newSupplier.status}
-                 </span>
-               )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase mb-1 text-gray-500">Supplier Code (Auto)</label>
-              <input
-                type="text"
-                value={newSupplier.code}
-                readOnly
-                className="w-full px-3 py-2 border border-black bg-gray-100 font-mono text-sm cursor-not-allowed"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase mb-1">Supplier Name *</label>
-              <input
-                type="text"
-                value={newSupplier.name}
-                readOnly={!isEditable}
-                onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })}
-                className={`w-full px-3 py-2 border border-black text-sm font-bold ${!isEditable ? "bg-gray-100 outline-none" : "focus:ring-1 focus:ring-black outline-none"}`}
-                placeholder="Enter supplier name"
-                autoFocus={isEditable}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-xs font-bold uppercase mb-1">Tax Code *</label>
-                <input
-                  type="text"
-                  value={newSupplier.taxCode}
-                  readOnly={!isEditable}
-                  onChange={(e) => setNewSupplier({ ...newSupplier, taxCode: e.target.value })}
-                  className={`w-full px-3 py-2 border border-black text-sm font-mono ${!isEditable ? "bg-gray-100 outline-none" : "focus:ring-1 focus:ring-black outline-none"}`}
-                  placeholder="Tax identification number"
-                />
+          <div className="space-y-8">
+            
+            {/* BLOCK 1: BUSINESS INFORMATION */}
+            <div className="border border-black p-6 bg-gray-50/50">
+              <div className="flex items-center justify-between border-b border-black pb-3 mb-5">
+                 <h3 className="text-sm font-black uppercase tracking-widest text-black">1. Business Information</h3>
+                 {viewMode === "DETAIL" && (
+                   <span className={`px-2 py-1 border text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 w-fit ${newSupplier.status === 'Active' ? 'border-black bg-black text-white' : 'border-gray-400 bg-gray-100 text-gray-500'}`}>
+                     {newSupplier.status}
+                   </span>
+                 )}
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase mb-1">Contact Phone *</label>
-                <input
-                  type="text"
-                  value={newSupplier.contact}
-                  readOnly={!isEditable}
-                  onChange={(e) => setNewSupplier({ ...newSupplier, contact: e.target.value })}
-                  className={`w-full px-3 py-2 border border-black text-sm font-mono ${!isEditable ? "bg-gray-100 outline-none" : "focus:ring-1 focus:ring-black outline-none"}`}
-                  placeholder="+84 xxx xxx xxx"
-                />
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-xs font-bold uppercase mb-1 text-gray-500">Supplier Code (Auto Generated)</label>
+                  <input
+                    type="text"
+                    value={newSupplier.code}
+                    readOnly
+                    className="w-full px-3 py-2 border border-black bg-gray-100 font-mono text-sm cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-xs font-bold uppercase mb-1">Company / Supplier Name *</label>
+                    <input
+                      type="text"
+                      value={newSupplier.name}
+                      readOnly={!isEditable}
+                      onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })}
+                      className={`w-full px-3 py-2 border border-black text-sm font-bold ${!isEditable ? "bg-gray-100 outline-none" : "focus:ring-1 focus:ring-black outline-none bg-white"}`}
+                      placeholder="Enter supplier registered name"
+                      autoFocus={isEditable}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase mb-1">Tax Code (MST) *</label>
+                    <input
+                      type="text"
+                      value={newSupplier.taxCode}
+                      readOnly={!isEditable}
+                      onChange={(e) => setNewSupplier({ ...newSupplier, taxCode: e.target.value })}
+                      className={`w-full px-3 py-2 border border-black text-sm font-mono ${!isEditable ? "bg-gray-100 outline-none" : "focus:ring-1 focus:ring-black outline-none bg-white"}`}
+                      placeholder="Tax identification number"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase mb-1">Business Address</label>
+                  <textarea
+                    value={newSupplier.address}
+                    readOnly={!isEditable}
+                    onChange={(e) => setNewSupplier({ ...newSupplier, address: e.target.value })}
+                    className={`w-full px-3 py-2 border border-black h-20 text-sm resize-none ${!isEditable ? "bg-gray-100 outline-none" : "focus:ring-1 focus:ring-black outline-none bg-white"}`}
+                    placeholder="Supplier headquarters or warehouse address..."
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="pt-4 mt-2 border-t border-gray-200">
-               <h3 className="text-sm font-black uppercase tracking-widest text-gray-500 mb-4 pb-2">Contact Details</h3>
+            {/* BLOCK 2: CONTACT PERSON DETAILS */}
+            <div className="border border-black p-6 bg-white">
+              <div className="border-b border-black pb-3 mb-5">
+                 <h3 className="text-sm font-black uppercase tracking-widest text-black">2. Contact Person Details</h3>
+                 <p className="text-[10px] uppercase text-gray-500 font-bold mt-1 tracking-wider">Information consolidated into single DB field</p>
+              </div>
+
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-xs font-bold uppercase mb-1">Representative Name *</label>
+                    <input
+                      type="text"
+                      value={contactName}
+                      readOnly={!isEditable}
+                      onChange={(e) => setContactName(e.target.value)}
+                      className={`w-full px-3 py-2 border border-black text-sm font-bold ${!isEditable ? "bg-gray-100 outline-none" : "focus:ring-1 focus:ring-black outline-none"}`}
+                      placeholder="e.g. Nguyen Van A"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase mb-1">Contact Phone *</label>
+                    <input
+                      type="text"
+                      value={contactPhone}
+                      readOnly={!isEditable}
+                      onChange={(e) => setContactPhone(e.target.value)}
+                      className={`w-full px-3 py-2 border border-black text-sm font-mono ${!isEditable ? "bg-gray-100 outline-none" : "focus:ring-1 focus:ring-black outline-none"}`}
+                      placeholder="+84 9xx xxx xxx"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase mb-1">Contact Email</label>
+                  <input
+                    type="email"
+                    value={newSupplier.email}
+                    readOnly={!isEditable}
+                    onChange={(e) => setNewSupplier({ ...newSupplier, email: e.target.value })}
+                    className={`w-full px-3 py-2 border border-black text-sm font-mono ${!isEditable ? "bg-gray-100 outline-none" : "focus:ring-1 focus:ring-black outline-none"}`}
+                    placeholder="email@supplier.com"
+                  />
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold uppercase mb-1">Email</label>
-              <input
-                type="email"
-                value={newSupplier.email}
-                readOnly={!isEditable}
-                onChange={(e) => setNewSupplier({ ...newSupplier, email: e.target.value })}
-                className={`w-full px-3 py-2 border border-black text-sm font-mono ${!isEditable ? "bg-gray-100 outline-none" : "focus:ring-1 focus:ring-black outline-none"}`}
-                placeholder="email@supplier.com"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase mb-1">Address</label>
-              <textarea
-                value={newSupplier.address}
-                readOnly={!isEditable}
-                onChange={(e) => setNewSupplier({ ...newSupplier, address: e.target.value })}
-                className={`w-full px-3 py-2 border border-black h-24 text-sm resize-none ${!isEditable ? "bg-gray-100 outline-none" : "focus:ring-1 focus:ring-black outline-none"}`}
-                placeholder="Supplier full address..."
-              />
-            </div>
           </div>
 
+          {/* Action Buttons */}
           {isEditable && (
-            <div className="flex gap-3 justify-end mt-10 pt-6 border-t-2 border-black">
+            <div className="flex gap-3 justify-end mt-8 pt-6 border-t-2 border-black">
               <button
                 onClick={handleCancelForm}
                 className="px-6 py-2 border border-black bg-white hover:bg-gray-100 font-bold uppercase tracking-wider text-sm transition-colors"
@@ -354,14 +414,14 @@ export function Suppliers() {
               </button>
               <button
                 onClick={handleSaveSupplier}
-                disabled={!newSupplier.name || !newSupplier.taxCode || !newSupplier.contact}
+                disabled={!newSupplier.name || !newSupplier.taxCode || !contactName || !contactPhone}
                 className={`px-8 py-2 border border-black font-bold uppercase tracking-wider text-sm transition-all ${
-                  newSupplier.name && newSupplier.taxCode && newSupplier.contact
+                  newSupplier.name && newSupplier.taxCode && contactName && contactPhone
                     ? "bg-black text-white hover:invert"
                     : "bg-gray-200 text-gray-500 cursor-not-allowed"
                 }`}
               >
-                {viewMode === "ADD" ? "Save Supplier" : "Update Supplier"}
+                {viewMode === "ADD" ? "Save Supplier" : "Update Profile"}
               </button>
             </div>
           )}
