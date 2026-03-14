@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Plus, Search, Upload, Download, Eye, Lock, Unlock, AlertCircle, Edit } from "lucide-react";
+import { useState, useMemo, Fragment } from "react";
+import { Plus, Search, Upload, Download, Eye, Lock, Unlock, AlertCircle, Edit, Activity, Copy } from "lucide-react";
 import { Pagination } from "../components/Pagination";
 
 // --- INTERFACES ---
@@ -16,9 +16,8 @@ interface MaterialMaster {
   id: string;
   name: string;
   category: string;
-  origin: string; // Đã đổi từ 'unit' sang 'origin'
+  origin: string; 
   description: string;
-  sensoryData?: SensoryData;
 }
 
 interface MaterialBatch {
@@ -31,11 +30,11 @@ interface MaterialBatch {
   importDate: string;
   expiryDate: string;
   status: "Active" | "Locked" | "Expired" | "Empty";
+  sensoryData?: SensoryData; // Chuyển Sensory xuống Batch
 }
 
 type ViewMode = "LIST" | "ADD_MATERIAL" | "DETAIL_MATERIAL" | "IMPORT" | "EXPORT" | "BATCHES";
 
-// Giá trị mặc định cho hồ sơ cảm quan để tránh lỗi render SVG
 const defaultSensory: SensoryData = { bitter: 5, sweet: 5, sour: 5, body: 5, caffein: 0, flavor: "" };
 
 export function Materials() {
@@ -49,30 +48,37 @@ export function Materials() {
   
   // Form Data
   const [editingMaterial, setEditingMaterial] = useState<MaterialMaster | null>(null);
-  const [currentMaterialSensory, setCurrentMaterialSensory] = useState<SensoryData>(defaultSensory);
   const [selectedMaterialForBatches, setSelectedMaterialForBatches] = useState<MaterialMaster | null>(null);
+  
+  // Trạng thái mở rộng xem Sensory ở màn Batch
+  const [expandedBatchSensory, setExpandedBatchSensory] = useState<string | null>(null);
 
   // Pagination
   const [currentPageMaterials, setCurrentPageMaterials] = useState(1);
   const itemsPerPage = 10;
 
   // --- MOCK DATA ---
+  const MOCK_SUPPLIERS = ["Highland Coffee Suppliers", "Vietnam Coffee Export Co.", "Arabica Premium Ltd.", "Local Farm DX"];
+
   const [materialMasters, setMaterialMasters] = useState<MaterialMaster[]>([
-    { 
-      id: "MAT-M001", name: "Arabica Green Beans", category: "Coffee Beans", origin: "Cầu Đất, Lâm Đồng", description: "Premium Arabica green coffee beans", 
-      sensoryData: { bitter: 3, sweet: 7, sour: 6, body: 4, caffein: 1.5, flavor: "Floral, Citrus, Caramel" } 
-    },
-    { 
-      id: "MAT-M002", name: "Robusta Green Beans", category: "Coffee Beans", origin: "Buôn Ma Thuột, Đắk Lắk", description: "High-quality Robusta beans",
-      sensoryData: { bitter: 8, sweet: 2, sour: 2, body: 9, caffein: 2.7, flavor: "Dark Chocolate, Earthy, Woody" }
-    },
+    { id: "MAT-M001", name: "Arabica Green Beans", category: "Coffee Beans", origin: "Cầu Đất, Lâm Đồng", description: "Premium Arabica green coffee beans" },
+    { id: "MAT-M002", name: "Robusta Green Beans", category: "Coffee Beans", origin: "Buôn Ma Thuột, Đắk Lắk", description: "High-quality Robusta beans" },
     { id: "MAT-M003", name: "Culi Green Beans", category: "Coffee Beans", origin: "Đắk Mil, Đắk Nông", description: "High-quality Culi Beans" },
   ]);
 
   const [batches, setBatches] = useState<MaterialBatch[]>([
-    { id: "BAT-20260115-01", materialId: "MAT-M001", supplier: "SUP001", importPrice: 250000, initialQty: 500, remainingQty: 350, importDate: "2026-01-15", expiryDate: "2027-01-15", status: "Active" },
-    { id: "BAT-20260220-02", materialId: "MAT-M001", supplier: "SUP002", importPrice: 255000, initialQty: 200, remainingQty: 200, importDate: "2026-02-20", expiryDate: "2027-02-20", status: "Active" },
-    { id: "BAT-20260210-01", materialId: "MAT-M002", supplier: "SUP002", importPrice: 180000, initialQty: 300, remainingQty: 0, importDate: "2026-02-10", expiryDate: "2027-02-10", status: "Empty" },
+    { 
+      id: "BAT-20260115-01", materialId: "MAT-M001", supplier: "Highland Coffee Suppliers", importPrice: 250000, initialQty: 500, remainingQty: 350, importDate: "2026-01-15", expiryDate: "2027-01-15", status: "Active",
+      sensoryData: { bitter: 3, sweet: 7, sour: 6, body: 4, caffein: 1.5, flavor: "Floral, Citrus, Caramel" }
+    },
+    { 
+      id: "BAT-20260220-02", materialId: "MAT-M001", supplier: "Local Farm DX", importPrice: 255000, initialQty: 200, remainingQty: 200, importDate: "2026-02-20", expiryDate: "2027-02-20", status: "Active",
+      sensoryData: { bitter: 4, sweet: 6, sour: 5, body: 5, caffein: 1.6, flavor: "Nutty, Chocolate" }
+    },
+    { 
+      id: "BAT-20260210-01", materialId: "MAT-M002", supplier: "Vietnam Coffee Export Co.", importPrice: 180000, initialQty: 300, remainingQty: 0, importDate: "2026-02-10", expiryDate: "2027-02-10", status: "Empty",
+      sensoryData: { bitter: 8, sweet: 2, sour: 2, body: 9, caffein: 2.7, flavor: "Dark Chocolate, Earthy, Woody" }
+    },
   ]);
 
   // --- DERIVED CALCULATIONS ---
@@ -84,13 +90,15 @@ export function Materials() {
 
   // --- FORM STATES ---
   const [newMaterial, setNewMaterial] = useState<MaterialMaster>({ id: "", name: "", category: "", origin: "", description: "" });
+  
+  // State cho Form Import
   const [importData, setImportData] = useState({ materialId: "", supplier: "", qty: "", unitPrice: "", importDate: new Date().toISOString().split("T")[0], expiryDate: "" });
+  const [importSensory, setImportSensory] = useState<SensoryData>(defaultSensory);
   const [exportData, setExportData] = useState({ materialId: "", batchId: "", type: "Production", qty: "", reference: "", exportDate: new Date().toISOString().split("T")[0] });
 
   // --- HANDLERS: MATERIAL MASTER ---
   const handleAddMaterial = () => {
     setEditingMaterial(null);
-    setCurrentMaterialSensory({ ...defaultSensory });
     setNewMaterial({ id: `MAT-M${String(materialMasters.length + 1).padStart(3, "0")}`, name: "", category: "", origin: "", description: "" });
     setViewMode("ADD_MATERIAL");
     setIsEditable(true);
@@ -98,51 +106,62 @@ export function Materials() {
 
   const handleDetailMaterial = (material: MaterialMaster) => {
     setEditingMaterial(material); 
-    setCurrentMaterialSensory(material.sensoryData ? { ...material.sensoryData } : { ...defaultSensory }); 
     setNewMaterial({ ...material });
     setViewMode("DETAIL_MATERIAL");
     setIsEditable(false);
   };
 
   const handleSaveMaterial = () => {
-    const materialToSave = { ...newMaterial, sensoryData: currentMaterialSensory };
     if (editingMaterial) {
-      setMaterialMasters(materialMasters.map(m => m.id === editingMaterial.id ? materialToSave : m));
+      setMaterialMasters(materialMasters.map(m => m.id === editingMaterial.id ? newMaterial : m));
     } else {
-      setMaterialMasters([...materialMasters, materialToSave]);
+      setMaterialMasters([...materialMasters, newMaterial]);
     }
     setViewMode("LIST");
     setIsEditable(false);
   };
 
-  const handleCancelMaterial = () => {
-    if (viewMode === 'DETAIL_MATERIAL' && isEditable && editingMaterial) {
-      setNewMaterial({ ...editingMaterial });
-      setCurrentMaterialSensory(editingMaterial.sensoryData ? { ...editingMaterial.sensoryData } : { ...defaultSensory });
-      setIsEditable(false);
-    } else {
-      setViewMode("LIST");
-      setIsEditable(false);
-    }
-  };
-
   // --- HANDLERS: VIEW BATCHES ---
   const handleViewBatches = (material: MaterialMaster) => {
     setSelectedMaterialForBatches(material);
+    setExpandedBatchSensory(null);
     setViewMode("BATCHES");
   };
 
-  // --- HANDLERS: IMPORT / EXPORT BATCHES ---
+  // --- HANDLERS: IMPORT BATCH & SENSORY ---
+  const handleOpenImport = () => {
+    setImportData({ materialId: "", supplier: "", qty: "", unitPrice: "", importDate: new Date().toISOString().split("T")[0], expiryDate: "" });
+    setImportSensory({ ...defaultSensory });
+    setViewMode("IMPORT");
+  };
+
+  const handleAutoFillSensory = () => {
+    if (!importData.materialId) {
+      alert("Please select a Material first.");
+      return;
+    }
+    // Lấy batch mới nhất của material này (sắp xếp theo importDate giảm dần)
+    const materialBatches = batches.filter(b => b.materialId === importData.materialId && b.sensoryData);
+    if (materialBatches.length > 0) {
+      const latestBatch = materialBatches.sort((a, b) => new Date(b.importDate).getTime() - new Date(a.importDate).getTime())[0];
+      if (latestBatch.sensoryData) {
+        setImportSensory({ ...latestBatch.sensoryData });
+      }
+    } else {
+      alert("No previous sensory profile found for this material.");
+    }
+  };
+
   const handleImportMaterial = () => {
     const newBatch: MaterialBatch = {
       id: `BAT-${importData.importDate.replace(/-/g, "")}-${String(batches.length + 1).padStart(2, "0")}`,
       materialId: importData.materialId, supplier: importData.supplier, importPrice: parseFloat(importData.unitPrice) || 0,
       initialQty: parseFloat(importData.qty), remainingQty: parseFloat(importData.qty),
       importDate: importData.importDate, expiryDate: importData.expiryDate, status: "Active",
+      sensoryData: { ...importSensory } // Lưu sensory vào batch
     };
-    setBatches([...batches, newBatch]);
+    setBatches([newBatch, ...batches]); // Đưa lên đầu
     setViewMode("LIST");
-    setImportData({ materialId: "", supplier: "", qty: "", unitPrice: "", importDate: new Date().toISOString().split("T")[0], expiryDate: "" });
   };
 
   const handleExportMaterial = () => {
@@ -178,6 +197,31 @@ export function Materials() {
   const paginatedMaterials = filteredMaterials.slice((currentPageMaterials - 1) * itemsPerPage, currentPageMaterials * itemsPerPage);
   const batchesForExport = useMemo(() => batches.filter(b => b.materialId === exportData.materialId && b.status === "Active"), [exportData.materialId, batches]);
 
+  // --- REUSABLE COMPONENT: SENSORY RADAR ---
+  const SensoryRadar = ({ sensory }: { sensory: SensoryData }) => (
+    <div className="flex flex-col items-center justify-center">
+      <svg width="150" height="150" viewBox="0 0 120 120" className="w-full max-w-[150px] h-auto">
+        <polygon points="60,10 110,60 60,110 10,60" fill="none" stroke="#ccc" strokeWidth="1" />
+        <polygon points="60,35 85,60 60,85 35,60" fill="none" stroke="#ccc" strokeWidth="1" />
+        <line x1="60" y1="10" x2="60" y2="110" stroke="#aaa" strokeWidth="1" strokeDasharray="2,2"/>
+        <line x1="10" y1="60" x2="110" y2="60" stroke="#aaa" strokeWidth="1" strokeDasharray="2,2"/>
+        <text x="60" y="8" textAnchor="middle" fontSize="6" fontWeight="bold" fill="black">BITTER</text>
+        <text x="112" y="62" textAnchor="start" fontSize="6" fontWeight="bold" fill="black">SWEET</text>
+        <text x="60" y="118" textAnchor="middle" fontSize="6" fontWeight="bold" fill="black">SOUR</text>
+        <text x="8" y="62" textAnchor="end" fontSize="6" fontWeight="bold" fill="black">BODY</text>
+        <polygon 
+          points={`
+            60,${60 - (sensory.bitter * 5)} 
+            ${60 + (sensory.sweet * 5)},60 
+            60,${60 + (sensory.sour * 5)} 
+            ${60 - (sensory.body * 5)},60
+          `}
+          fill="black" fillOpacity="0.2" stroke="black" strokeWidth="1.5"
+        />
+      </svg>
+    </div>
+  );
+
   return (
     <div className="bg-white text-black min-h-screen">
       
@@ -195,7 +239,7 @@ export function Materials() {
               <button onClick={handleAddMaterial} className="px-4 py-2 border border-black bg-white hover:bg-gray-100 flex items-center gap-2 text-sm font-bold uppercase">
                 <Plus size={16} /> Add Master
               </button>
-              <button onClick={() => setViewMode("IMPORT")} className="px-4 py-2 border border-black bg-black text-white hover:bg-gray-800 flex items-center gap-2 text-sm font-bold uppercase">
+              <button onClick={handleOpenImport} className="px-4 py-2 border border-black bg-black text-white hover:bg-gray-800 flex items-center gap-2 text-sm font-bold uppercase">
                 <Upload size={16} /> Import (New Batch)
               </button>
               <button onClick={() => setViewMode("EXPORT")} className="px-4 py-2 border border-black bg-white hover:bg-gray-100 flex items-center gap-2 text-sm font-bold uppercase">
@@ -242,10 +286,7 @@ export function Materials() {
                     <tr key={material.id} className="border-b border-gray-200 hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm text-center border-r border-black font-mono">{(currentPageMaterials - 1) * itemsPerPage + index + 1}</td>
                       <td className="px-4 py-3 text-sm font-bold font-mono border-r border-black">{material.id}</td>
-                      <td className="px-4 py-3 text-sm border-r border-black">
-                        {material.name}
-                        {material.sensoryData && <span className="ml-2 text-[10px] border border-black px-1 uppercase font-bold text-gray-500">Sensory ✓</span>}
-                      </td>
+                      <td className="px-4 py-3 text-sm border-r border-black font-bold">{material.name}</td>
                       <td className="px-4 py-3 text-sm border-r border-black">{material.origin || "-"}</td>
                       <td className="px-4 py-3 text-sm text-right border-r border-black font-mono font-bold">
                         <span className={hasStockWarning ? "text-red-600 flex items-center justify-end gap-1" : ""}>
@@ -254,7 +295,7 @@ export function Materials() {
                       </td>
                       <td className="px-4 py-3 text-sm flex justify-center gap-2">
                         <button onClick={() => handleViewBatches(material)} className="px-3 py-1 border border-black bg-black text-white hover:invert flex items-center gap-1 text-xs font-bold uppercase"><Eye size={12} /> Batches</button>
-                        <button onClick={() => handleDetailMaterial(material)} className="px-3 py-1 border border-black bg-white hover:bg-gray-200 flex items-center gap-1 text-xs font-bold uppercase"><Eye size={12} /> Detail</button>
+                        <button onClick={() => handleDetailMaterial(material)} className="px-3 py-1 border border-black bg-white hover:bg-gray-200 flex items-center gap-1 text-xs font-bold uppercase"><Edit size={12} /> Detail</button>
                       </td>
                     </tr>
                   );
@@ -302,44 +343,72 @@ export function Materials() {
                     <th className="p-2 border-r border-black">Batch Code</th>
                     <th className="p-2 border-r border-black">Supplier</th>
                     <th className="p-2 border-r border-black">Import / Expiry</th>
-                    <th className="p-2 border-r border-black text-right">Cost (₫)</th>
                     <th className="p-2 border-r border-black text-right">Rem. Qty (Kg)</th>
                     <th className="p-2 border-r border-black text-center">Status</th>
-                    <th className="p-2 text-center">Toggle Lock</th>
+                    <th className="p-2 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {batches.filter(b => b.materialId === selectedMaterialForBatches.id).map(batch => (
-                    <tr key={batch.id} className={`border-b border-gray-200 ${batch.status === 'Locked' ? 'bg-gray-100 text-gray-500' : 'bg-white'}`}>
-                      <td className="p-2 border-r border-black font-mono font-bold">{batch.id}</td>
-                      <td className="p-2 border-r border-black">{batch.supplier}</td>
-                      <td className="p-2 border-r border-black font-mono">{batch.importDate} <br/> <span className="text-gray-500">EXP: {batch.expiryDate}</span></td>
-                      <td className="p-2 border-r border-black text-right font-mono">{batch.importPrice.toLocaleString()}</td>
-                      <td className="p-2 border-r border-black text-right font-mono font-bold">
-                        {batch.remainingQty} <span className="text-[10px] font-normal text-gray-500">/ {batch.initialQty}</span>
-                      </td>
-                      <td className="p-2 border-r border-black text-center">
-                        <span className={`px-2 py-0.5 border font-bold uppercase tracking-wider text-[10px] ${
-                          batch.status === 'Active' ? 'border-black bg-black text-white' : 
-                          batch.status === 'Empty' ? 'border-gray-400 text-gray-400' : 'border-black bg-white text-black'
-                        }`}>
-                          {batch.status}
-                        </span>
-                      </td>
-                      <td className="p-2 text-center">
-                          <button 
-                          onClick={() => handleToggleBatchStatus(batch.id)}
-                          disabled={batch.status === "Empty" || batch.status === "Expired"}
-                          className="p-1.5 border border-black hover:bg-gray-200 disabled:opacity-30"
-                          title="Lock/Unlock this batch"
-                          >
-                            {batch.status === 'Locked' ? <Lock size={14}/> : <Unlock size={14}/>}
-                          </button>
-                      </td>
-                    </tr>
+                    <Fragment key={batch.id}>
+                      <tr className={`border-b border-gray-200 ${batch.status === 'Locked' ? 'bg-gray-100 text-gray-500' : 'bg-white'}`}>
+                        <td className="p-2 border-r border-black font-mono font-bold">{batch.id}</td>
+                        <td className="p-2 border-r border-black">{batch.supplier}</td>
+                        <td className="p-2 border-r border-black font-mono">{batch.importDate} <br/> <span className="text-gray-500">EXP: {batch.expiryDate}</span></td>
+                        <td className="p-2 border-r border-black text-right font-mono font-bold">
+                          {batch.remainingQty} <span className="text-[10px] font-normal text-gray-500">/ {batch.initialQty}</span>
+                        </td>
+                        <td className="p-2 border-r border-black text-center">
+                          <span className={`px-2 py-0.5 border font-bold uppercase tracking-wider text-[10px] ${
+                            batch.status === 'Active' ? 'border-black bg-black text-white' : 
+                            batch.status === 'Empty' ? 'border-gray-400 text-gray-400' : 'border-black bg-white text-black'
+                          }`}>
+                            {batch.status}
+                          </span>
+                        </td>
+                        <td className="p-2 text-center">
+                            <div className="flex justify-center gap-2">
+                              <button 
+                                onClick={() => setExpandedBatchSensory(expandedBatchSensory === batch.id ? null : batch.id)}
+                                disabled={!batch.sensoryData}
+                                className="p-1.5 border border-black hover:bg-gray-200 disabled:opacity-30 disabled:hover:bg-transparent"
+                                title={batch.sensoryData ? "View Sensory Profile" : "No sensory data for this batch"}
+                              >
+                                <Activity size={14}/>
+                              </button>
+                              <button 
+                                onClick={() => handleToggleBatchStatus(batch.id)}
+                                disabled={batch.status === "Empty" || batch.status === "Expired"}
+                                className="p-1.5 border border-black hover:bg-gray-200 disabled:opacity-30"
+                                title="Lock/Unlock this batch"
+                              >
+                                {batch.status === 'Locked' ? <Lock size={14}/> : <Unlock size={14}/>}
+                              </button>
+                            </div>
+                        </td>
+                      </tr>
+                      {/* Accordion Row for Sensory Profile */}
+                      {expandedBatchSensory === batch.id && batch.sensoryData && (
+                        <tr className="border-b border-black bg-gray-50">
+                          <td colSpan={6} className="p-4">
+                             <div className="border border-black p-4 bg-white flex gap-6 items-center">
+                                <SensoryRadar sensory={batch.sensoryData} />
+                                <div className="flex-1 grid grid-cols-2 gap-4 text-xs font-mono uppercase">
+                                  <div><span className="font-bold text-gray-500 mr-2">Bitter:</span> {batch.sensoryData.bitter}/10</div>
+                                  <div><span className="font-bold text-gray-500 mr-2">Sweet:</span> {batch.sensoryData.sweet}/10</div>
+                                  <div><span className="font-bold text-gray-500 mr-2">Sour:</span> {batch.sensoryData.sour}/10</div>
+                                  <div><span className="font-bold text-gray-500 mr-2">Body:</span> {batch.sensoryData.body}/10</div>
+                                  <div><span className="font-bold text-gray-500 mr-2">Caffeine:</span> {batch.sensoryData.caffein}%</div>
+                                  <div className="col-span-2"><span className="font-bold text-gray-500 mr-2">Flavor Notes:</span> {batch.sensoryData.flavor}</div>
+                                </div>
+                             </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                   {batches.filter(b => b.materialId === selectedMaterialForBatches.id).length === 0 && (
-                    <tr><td colSpan={7} className="p-4 text-center italic">No batches found for this material.</td></tr>
+                    <tr><td colSpan={6} className="p-4 text-center italic">No batches found for this material.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -352,7 +421,7 @@ export function Materials() {
          MÀN HÌNH 3: ADD/DETAIL/EDIT MATERIAL MASTER
       ========================================= */}
       {(viewMode === "ADD_MATERIAL" || viewMode === "DETAIL_MATERIAL") && (
-        <div className="bg-white border-2 border-black p-6 w-full shadow-sm max-w-5xl mx-auto mt-4">
+        <div className="bg-white border-2 border-black p-6 w-full shadow-sm max-w-2xl mx-auto mt-4">
           <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-black">
             <div className="flex items-center gap-4">
               <h2 className="text-xl font-black uppercase tracking-tighter">
@@ -387,7 +456,7 @@ export function Materials() {
             </div>
             <div>
               <label className="block text-xs font-bold uppercase mb-1">Material Name *</label>
-              <input type="text" value={newMaterial.name} onChange={(e) => setNewMaterial({ ...newMaterial, name: e.target.value })} readOnly={!isEditable} className={`w-full px-3 py-2 border border-black text-sm ${!isEditable ? 'bg-gray-100 outline-none' : ''}`} placeholder="e.g., Arabica Green Beans" />
+              <input type="text" value={newMaterial.name} onChange={(e) => setNewMaterial({ ...newMaterial, name: e.target.value })} readOnly={!isEditable} className={`w-full px-3 py-2 border border-black text-sm font-bold ${!isEditable ? 'bg-gray-100 outline-none' : ''}`} placeholder="e.g., Arabica Green Beans" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -399,94 +468,21 @@ export function Materials() {
             </div>
             <div>
               <label className="block text-xs font-bold uppercase mb-1">Description</label>
-              <textarea value={newMaterial.description} onChange={(e) => setNewMaterial({ ...newMaterial, description: e.target.value })} readOnly={!isEditable} className={`w-full px-3 py-2 border border-black h-16 text-sm ${!isEditable ? 'bg-gray-100 outline-none' : ''}`} />
+              <textarea value={newMaterial.description} onChange={(e) => setNewMaterial({ ...newMaterial, description: e.target.value })} readOnly={!isEditable} className={`w-full px-3 py-2 border border-black h-24 text-sm resize-none ${!isEditable ? 'bg-gray-100 outline-none' : ''}`} />
             </div>
-
-            {/* INTEGRATED SENSORY PROFILE */}
-            <div className="border-t-2 border-black pt-6 mt-6">
-              <h3 className="text-sm font-black uppercase mb-4">Master Sensory Profile</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border border-black p-4 bg-gray-50">
-                {/* 1. Radar Chart (SVG) */}
-                <div className="col-span-1 flex flex-col items-center justify-center border-r border-black pr-4">
-                  <svg width="200" height="200" viewBox="0 0 120 120" className="w-full max-w-[200px] h-auto">
-                    <polygon points="60,10 110,60 60,110 10,60" fill="none" stroke="#ccc" strokeWidth="1" />
-                    <polygon points="60,35 85,60 60,85 35,60" fill="none" stroke="#ccc" strokeWidth="1" />
-                    <line x1="60" y1="10" x2="60" y2="110" stroke="#aaa" strokeWidth="1" strokeDasharray="2,2"/>
-                    <line x1="10" y1="60" x2="110" y2="60" stroke="#aaa" strokeWidth="1" strokeDasharray="2,2"/>
-                    <text x="60" y="8" textAnchor="middle" fontSize="5" fontWeight="bold" fill="black">BITTER</text>
-                    <text x="112" y="62" textAnchor="start" fontSize="5" fontWeight="bold" fill="black">SWEET</text>
-                    <text x="60" y="118" textAnchor="middle" fontSize="5" fontWeight="bold" fill="black">SOUR</text>
-                    <text x="8" y="62" textAnchor="end" fontSize="5" fontWeight="bold" fill="black">BODY</text>
-                    <polygon 
-                      points={`
-                        60,${60 - (currentMaterialSensory.bitter * 5)} 
-                        ${60 + (currentMaterialSensory.sweet * 5)},60 
-                        60,${60 + (currentMaterialSensory.sour * 5)} 
-                        ${60 - (currentMaterialSensory.body * 5)},60
-                      `}
-                      fill="black" fillOpacity="0.2" stroke="black" strokeWidth="1.5"
-                    />
-                  </svg>
-                </div>
-
-                {/* 2. Sliders & Text Inputs */}
-                <div className="col-span-2 space-y-4">
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                    {['bitter', 'sweet', 'sour', 'body'].map((attr) => (
-                      <div key={attr}>
-                        <div className="flex justify-between mb-1">
-                          <label className="text-xs font-bold uppercase">{attr}</label>
-                          <span className="text-xs font-mono font-bold bg-white border border-black px-1">
-                            {currentMaterialSensory[attr as keyof SensoryData]}/10
-                          </span>
-                        </div>
-                        <input 
-                          type="range" min="1" max="10" step="1" 
-                          value={currentMaterialSensory[attr as keyof SensoryData]}
-                          onChange={(e) => setCurrentMaterialSensory({ ...currentMaterialSensory, [attr]: parseInt(e.target.value) })}
-                          disabled={!isEditable}
-                          className="w-full accent-black cursor-pointer disabled:opacity-50"
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4 border-t border-black pt-4 mt-2">
-                    <div className="col-span-1">
-                      <label className="block text-xs font-bold uppercase mb-1">Caffeine (%)</label>
-                      <input 
-                        type="number" min="0" max="100" step="0.1"
-                        value={currentMaterialSensory.caffein}
-                        onChange={(e) => setCurrentMaterialSensory({ ...currentMaterialSensory, caffein: parseFloat(e.target.value) || 0 })}
-                        readOnly={!isEditable}
-                        className={`w-full px-3 py-2 border border-black text-sm font-mono ${!isEditable ? 'bg-gray-100 outline-none' : 'bg-white'}`}
-                        placeholder="%"
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-xs font-bold uppercase mb-1">Flavor Notes</label>
-                      <input 
-                        type="text" 
-                        value={currentMaterialSensory.flavor}
-                        onChange={(e) => setCurrentMaterialSensory({ ...currentMaterialSensory, flavor: e.target.value })}
-                        readOnly={!isEditable}
-                        className={`w-full px-3 py-2 border border-black text-sm ${!isEditable ? 'bg-gray-100 outline-none' : 'bg-white'}`}
-                        placeholder="e.g., Floral, Nutty, Dark Chocolate..."
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
+            
+            {/* Note about sensory */}
+            <div className="p-3 border border-black bg-gray-50 flex gap-2 items-start mt-4">
+               <AlertCircle size={16} className="mt-0.5 shrink-0" />
+               <p className="text-xs uppercase font-bold text-gray-600">Sensory profiles are no longer managed at the master level. They must be recorded for each specific batch during the import process.</p>
             </div>
-
           </div>
 
           {isEditable && (
             <div className="flex gap-2 justify-end mt-8 border-t-2 border-black pt-4">
-              <button onClick={handleCancelMaterial} className="px-6 py-2 border border-black bg-white hover:bg-gray-100 font-bold uppercase text-sm">Cancel</button>
+              <button onClick={() => { setIsEditable(false); if(viewMode==="ADD_MATERIAL") setViewMode("LIST"); }} className="px-6 py-2 border border-black bg-white hover:bg-gray-100 font-bold uppercase text-sm">Cancel</button>
               <button onClick={handleSaveMaterial} disabled={!newMaterial.name || !newMaterial.category} className="px-6 py-2 border border-black bg-black text-white hover:invert font-bold uppercase text-sm disabled:opacity-50">
-                {viewMode === "ADD_MATERIAL" ? "Save Master" : "Update Master"}
+                {viewMode === "ADD_MATERIAL" ? "Save Master Data" : "Update Master Data"}
               </button>
             </div>
           )}
@@ -497,52 +493,126 @@ export function Materials() {
          MÀN HÌNH 4: IMPORT MATERIAL (CREATE BATCH)
       ========================================= */}
       {viewMode === "IMPORT" && (
-        <div className="bg-white border-2 border-black p-6 w-full shadow-sm max-w-4xl mx-auto mt-4">
+        <div className="bg-white border-2 border-black p-6 w-full shadow-sm max-w-5xl mx-auto mt-4">
           <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-black">
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tighter">Import Material</h2>
-              <p className="text-xs uppercase text-gray-500 font-bold mt-1">Creates a new batch in inventory</p>
+              <h2 className="text-xl font-black uppercase tracking-tighter">Import Material (New Batch)</h2>
+              <p className="text-xs uppercase text-gray-500 font-bold mt-1">Record inbound logistics and QC sensory profile</p>
             </div>
             <button onClick={() => setViewMode("LIST")} className="px-4 py-2 border border-black hover:bg-gray-100 font-bold uppercase text-sm">
               Back to List
             </button>
           </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold uppercase mb-1">Select Material Master *</label>
-              <select value={importData.materialId} onChange={(e) => setImportData({ ...importData, materialId: e.target.value })} className="w-full px-3 py-2 border border-black bg-white text-sm">
-                <option value="">-- Select Material --</option>
-                {materialMasters.map(m => <option key={m.id} value={m.id}>{m.id} - {m.name}</option>)}
-              </select>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* LEFT: Logistics Data */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-black uppercase border-b border-black pb-2 mb-4">1. Logistics Information</h3>
+              <div>
+                <label className="block text-xs font-bold uppercase mb-1">Select Material Master *</label>
+                <select value={importData.materialId} onChange={(e) => setImportData({ ...importData, materialId: e.target.value })} className="w-full px-3 py-2 border border-black bg-white text-sm font-bold">
+                  <option value="">-- Select Material --</option>
+                  {materialMasters.map(m => <option key={m.id} value={m.id}>{m.id} - {m.name}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase mb-1">Supplier *</label>
+                  <select value={importData.supplier} onChange={(e) => setImportData({ ...importData, supplier: e.target.value })} className="w-full px-3 py-2 border border-black bg-white text-sm">
+                    <option value="">-- Choose Supplier --</option>
+                    {MOCK_SUPPLIERS.map(sup => <option key={sup} value={sup}>{sup}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase mb-1">Import Price (VNĐ) *</label>
+                  <input type="number" value={importData.unitPrice} onChange={(e) => setImportData({ ...importData, unitPrice: e.target.value })} className="w-full px-3 py-2 border border-black text-sm font-mono" placeholder="Cost per Kg" />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase mb-1">Quantity (Kg) *</label>
+                  <input type="number" value={importData.qty} onChange={(e) => setImportData({ ...importData, qty: e.target.value })} className="w-full px-3 py-2 border border-black text-sm font-mono font-bold" placeholder="Amount" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase mb-1">Import Date *</label>
+                  <input type="date" value={importData.importDate} onChange={(e) => setImportData({ ...importData, importDate: e.target.value })} className="w-full px-3 py-2 border border-black text-sm font-mono" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase mb-1">Expiry Date *</label>
+                  <input type="date" value={importData.expiryDate} onChange={(e) => setImportData({ ...importData, expiryDate: e.target.value })} className="w-full px-3 py-2 border border-black text-sm font-mono" />
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold uppercase mb-1">Supplier *</label>
-                <input type="text" value={importData.supplier} onChange={(e) => setImportData({ ...importData, supplier: e.target.value })} className="w-full px-3 py-2 border border-black text-sm" placeholder="e.g., SUP001" />
+
+            {/* RIGHT: Sensory Profile */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-black pb-2 mb-4">
+                <h3 className="text-sm font-black uppercase">2. QC Sensory Profile</h3>
+                <button 
+                  onClick={handleAutoFillSensory} 
+                  className="px-2 py-1 border border-black text-[10px] font-bold uppercase flex items-center gap-1 hover:bg-black hover:text-white transition-colors"
+                  title="Copy scores from the latest batch of this material"
+                >
+                  <Copy size={12}/> Auto-fill Latest
+                </button>
               </div>
-              <div>
-                <label className="block text-xs font-bold uppercase mb-1">Import Price (VNĐ) *</label>
-                <input type="number" value={importData.unitPrice} onChange={(e) => setImportData({ ...importData, unitPrice: e.target.value })} className="w-full px-3 py-2 border border-black text-sm font-mono" placeholder="Cost per Kg" />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-bold uppercase mb-1">Quantity (Kg) *</label>
-                <input type="number" value={importData.qty} onChange={(e) => setImportData({ ...importData, qty: e.target.value })} className="w-full px-3 py-2 border border-black text-sm font-mono" placeholder="Amount" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold uppercase mb-1">Import Date *</label>
-                <input type="date" value={importData.importDate} onChange={(e) => setImportData({ ...importData, importDate: e.target.value })} className="w-full px-3 py-2 border border-black text-sm font-mono" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold uppercase mb-1">Expiry Date *</label>
-                <input type="date" value={importData.expiryDate} onChange={(e) => setImportData({ ...importData, expiryDate: e.target.value })} className="w-full px-3 py-2 border border-black text-sm font-mono" />
+              
+              <div className="border border-black p-4 bg-gray-50 relative">
+                {/* Visual Radar background */}
+                <div className="absolute top-4 right-4 opacity-10 pointer-events-none">
+                  <Activity size={100} />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4 relative z-10">
+                  {['bitter', 'sweet', 'sour', 'body'].map((attr) => (
+                    <div key={attr}>
+                      <div className="flex justify-between mb-1">
+                        <label className="text-xs font-bold uppercase">{attr}</label>
+                        <span className="text-xs font-mono font-bold bg-white border border-black px-1">
+                          {importSensory[attr as keyof SensoryData]}/10
+                        </span>
+                      </div>
+                      <input 
+                        type="range" min="1" max="10" step="1" 
+                        value={importSensory[attr as keyof SensoryData]}
+                        onChange={(e) => setImportSensory({ ...importSensory, [attr]: parseInt(e.target.value) })}
+                        className="w-full accent-black cursor-pointer"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 border-t border-black pt-4 mt-4 relative z-10">
+                  <div className="col-span-1">
+                    <label className="block text-xs font-bold uppercase mb-1">Caffeine (%)</label>
+                    <input 
+                      type="number" min="0" max="100" step="0.1"
+                      value={importSensory.caffein}
+                      onChange={(e) => setImportSensory({ ...importSensory, caffein: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-black text-sm font-mono bg-white"
+                      placeholder="%"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold uppercase mb-1">Flavor Notes</label>
+                    <input 
+                      type="text" 
+                      value={importSensory.flavor}
+                      onChange={(e) => setImportSensory({ ...importSensory, flavor: e.target.value })}
+                      className="w-full px-3 py-2 border border-black text-sm bg-white"
+                      placeholder="e.g., Floral, Nutty..."
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
+
           <div className="flex gap-2 justify-end mt-8 border-t-2 border-black pt-4">
             <button onClick={() => setViewMode("LIST")} className="px-6 py-2 border border-black bg-white hover:bg-gray-100 font-bold uppercase text-sm">Cancel</button>
-            <button onClick={handleImportMaterial} disabled={!importData.materialId || !importData.qty || !importData.expiryDate} className="px-6 py-2 border border-black bg-black text-white hover:invert font-bold uppercase text-sm disabled:opacity-50">Confirm Import</button>
+            <button onClick={handleImportMaterial} disabled={!importData.materialId || !importData.supplier || !importData.qty || !importData.expiryDate} className="px-8 py-2 border border-black bg-black text-white hover:invert font-bold uppercase text-sm disabled:opacity-50">
+              Confirm & Save Batch
+            </button>
           </div>
         </div>
       )}
