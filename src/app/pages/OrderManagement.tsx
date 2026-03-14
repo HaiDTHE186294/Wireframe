@@ -15,7 +15,10 @@ interface Order {
   customerName: string;
   phone?: string;
   address?: string;
-  totalValue: number;
+  subtotal: number;
+  discount: number;
+  shippingFee: number;
+  totalPrice: number;
   paymentMethod: string;
   status: string;
   lastModifiedBy?: string;
@@ -45,7 +48,7 @@ export function OrderManagement() {
 
   // --- STATES CREATE MANUAL ORDER ---
   const [newOrder, setNewOrder] = useState({
-    customerName: "", phone: "", address: "", paymentMethod: "COD", isWholesale: false
+    customerName: "", phone: "", address: "", paymentMethod: "COD", isWholesale: false, discount: 0, shippingFee: 0
   });
   const [newOrderItems, setNewOrderItems] = useState<OrderItem[]>([]);
   const [currentItem, setCurrentItem] = useState({ sku: "", name: "", qty: 1, unitPrice: 0 });
@@ -53,6 +56,8 @@ export function OrderManagement() {
   // --- STATES EDIT EXISTING ORDER ---
   const [isEditingOrder, setIsEditingOrder] = useState(false);
   const [editOrderItems, setEditOrderItems] = useState<OrderItem[]>([]);
+  const [editOrderDiscount, setEditOrderDiscount] = useState(0);
+  const [editOrderShippingFee, setEditOrderShippingFee] = useState(0);
 
   // Dữ liệu SKU mẫu để tạo đơn tay
   const availableProducts = [
@@ -65,7 +70,8 @@ export function OrderManagement() {
   const [orders, setOrders] = useState<Order[]>([
     {
       id: "ORD-001", customerName: "Nguyen Van A", phone: "0901234567", address: "123 Le Loi, Q1, HCMC",
-      totalValue: 360000, paymentMethod: "Bank Transfer", status: "New",
+      subtotal: 360000, discount: 20000, shippingFee: 30000, totalPrice: 370000, 
+      paymentMethod: "Bank Transfer", status: "New",
       lastModifiedBy: "SYSTEM", lastModifiedDate: "2026-03-04 09:00", isWholesale: false,
       items: [
         { sku: "SIG-250-W", name: "Signature Blend 250g (Hạt)", qty: 2, unitPrice: 180000 }
@@ -73,7 +79,8 @@ export function OrderManagement() {
     },
     {
       id: "ORD-002", customerName: "Coffee Shop Highland", phone: "0987654321", address: "45 Nguyen Trai, Da Lat",
-      totalValue: 25000000, paymentMethod: "Debt (Net 30)", status: "Waiting for Approval",
+      subtotal: 25000000, discount: 1000000, shippingFee: 0, totalPrice: 24000000, 
+      paymentMethod: "Debt (Net 30)", status: "Waiting for Approval",
       lastModifiedBy: "SALE-02", lastModifiedDate: "2026-03-04 10:30", isWholesale: true,
       items: [
         { sku: "SIG-500-GP", name: "Signature Blend 500g (Pha Phin)", qty: 50, unitPrice: 340000 },
@@ -82,7 +89,8 @@ export function OrderManagement() {
     },
     {
       id: "ORD-004", customerName: "The Coffee House", phone: "0911223344", address: "Kho TCH, Q9, HCMC",
-      totalValue: 42000000, paymentMethod: "Bank Transfer", status: "Awaiting Stock",
+      subtotal: 42000000, discount: 0, shippingFee: 500000, totalPrice: 42500000, 
+      paymentMethod: "Bank Transfer", status: "Awaiting Stock",
       lastModifiedBy: "SYSTEM", lastModifiedDate: "2026-03-04 11:00", isWholesale: true,
       items: [
         { sku: "ACD-500-W", name: "Arabica Cầu Đất 500g (Hạt)", qty: 100, unitPrice: 420000 }
@@ -131,23 +139,29 @@ export function OrderManagement() {
   const startEditOrder = () => {
     if (selectedOrder) {
       setEditOrderItems([...selectedOrder.items]);
+      setEditOrderDiscount(selectedOrder.discount);
+      setEditOrderShippingFee(selectedOrder.shippingFee);
       setIsEditingOrder(true);
     }
   };
 
   const saveOrderEdits = () => {
     if (!selectedOrder) return;
-    const newTotal = editOrderItems.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
+    const newSubtotal = editOrderItems.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
+    const newTotalPrice = newSubtotal - editOrderDiscount + editOrderShippingFee;
     
     let newStatus = selectedOrder.status;
-    if (selectedOrder.isWholesale && newTotal > 20000000 && newStatus === "New") {
+    if (selectedOrder.isWholesale && newTotalPrice > 20000000 && newStatus === "New") {
       newStatus = "Waiting for Approval";
     }
 
     const updatedOrder: Order = {
       ...selectedOrder,
       items: editOrderItems,
-      totalValue: newTotal,
+      subtotal: newSubtotal,
+      discount: editOrderDiscount,
+      shippingFee: editOrderShippingFee,
+      totalPrice: newTotalPrice,
       status: newStatus,
       lastModifiedBy: "CURRENT_USER",
       lastModifiedDate: new Date().toISOString().slice(0, 16).replace("T", " ")
@@ -170,16 +184,21 @@ export function OrderManagement() {
   };
 
   const submitManualOrder = () => {
-    const totalValue = newOrderItems.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
+    const subtotal = newOrderItems.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
+    const totalPrice = subtotal - newOrder.discount + newOrder.shippingFee;
+
     const newOrderObj: Order = {
       id: `ORD-M${String(orders.length + 1).padStart(3, "0")}`,
       customerName: newOrder.customerName,
       phone: newOrder.phone,
       address: newOrder.address,
       paymentMethod: newOrder.paymentMethod,
-      totalValue: totalValue,
+      subtotal: subtotal,
+      discount: newOrder.discount,
+      shippingFee: newOrder.shippingFee,
+      totalPrice: totalPrice,
       status: "Confirmed", 
-      isWholesale: newOrder.isWholesale || totalValue > 20000000,
+      isWholesale: newOrder.isWholesale || totalPrice > 20000000,
       lastModifiedBy: "CURRENT_USER",
       lastModifiedDate: new Date().toISOString().slice(0, 16).replace("T", " "),
       items: newOrderItems
@@ -189,7 +208,7 @@ export function OrderManagement() {
 
     setOrders([newOrderObj, ...orders]);
     setViewMode("LIST");
-    setNewOrder({ customerName: "", phone: "", address: "", paymentMethod: "COD", isWholesale: false });
+    setNewOrder({ customerName: "", phone: "", address: "", paymentMethod: "COD", isWholesale: false, discount: 0, shippingFee: 0 });
     setNewOrderItems([]);
   };
 
@@ -234,7 +253,7 @@ export function OrderManagement() {
                   <th className="px-4 py-3 text-xs font-black uppercase tracking-wider border-r border-black w-12">#</th>
                   <th className="px-4 py-3 text-xs font-black uppercase tracking-wider border-r border-black">Order ID</th>
                   <th className="px-4 py-3 text-xs font-black uppercase tracking-wider border-r border-black">Customer</th>
-                  <th className="px-4 py-3 text-xs font-black uppercase tracking-wider border-r border-black text-right">Total Value</th>
+                  <th className="px-4 py-3 text-xs font-black uppercase tracking-wider border-r border-black text-right">Total Price</th>
                   <th className="px-4 py-3 text-xs font-black uppercase tracking-wider border-r border-black">Payment</th>
                   <th className="px-4 py-3 text-xs font-black uppercase tracking-wider border-r border-black text-center">Status</th>
                   <th className="px-4 py-3 text-xs font-black uppercase tracking-wider text-center">Actions</th>
@@ -263,7 +282,7 @@ export function OrderManagement() {
                           </div>
                         </td>
                         <td className="px-4 py-4 border-r border-black text-right font-mono font-bold text-lg">
-                          {order.totalValue.toLocaleString("vi-VN")} ₫
+                          {order.totalPrice.toLocaleString("vi-VN")} ₫
                         </td>
                         <td className="px-4 py-4 border-r border-black text-sm uppercase">{order.paymentMethod}</td>
                         <td className="px-4 py-4 border-r border-black text-center">
@@ -435,14 +454,36 @@ export function OrderManagement() {
                   {(isEditingOrder ? editOrderItems : selectedOrder.items).reduce((sum, i) => sum + (i.qty * i.unitPrice), 0).toLocaleString()} ₫
                 </span>
               </div>
+              <div className="flex justify-between items-center mb-2 text-sm uppercase font-bold text-red-600">
+                <span>Discount</span>
+                {isEditingOrder ? (
+                  <div className="flex items-center gap-1">
+                    <span>-</span>
+                    <input type="number" min="0" value={editOrderDiscount} onChange={(e) => setEditOrderDiscount(parseInt(e.target.value) || 0)} className="w-24 p-1 border border-red-400 text-right outline-none focus:border-red-600 font-mono text-black bg-white" />
+                    <span className="text-black">₫</span>
+                  </div>
+                ) : (
+                  <span className="font-mono">- {selectedOrder.discount.toLocaleString()} ₫</span>
+                )}
+              </div>
               <div className="flex justify-between items-center mb-2 text-sm uppercase font-bold text-gray-600">
                 <span>Shipping Fee</span>
-                <span className="font-mono text-black">0 ₫</span>
+                {isEditingOrder ? (
+                  <div className="flex items-center gap-1">
+                    <span>+</span>
+                    <input type="number" min="0" value={editOrderShippingFee} onChange={(e) => setEditOrderShippingFee(parseInt(e.target.value) || 0)} className="w-24 p-1 border border-gray-400 text-right outline-none focus:border-black font-mono text-black bg-white" />
+                    <span className="text-black">₫</span>
+                  </div>
+                ) : (
+                  <span className="font-mono">+ {selectedOrder.shippingFee.toLocaleString()} ₫</span>
+                )}
               </div>
               <div className="flex justify-between items-center mt-4 pt-2 border-t border-black text-xl font-black uppercase tracking-widest">
-                <span>Total</span>
+                <span>Total Price</span>
                 <span className="font-mono text-black">
-                  {(isEditingOrder ? editOrderItems : selectedOrder.items).reduce((sum, i) => sum + (i.qty * i.unitPrice), 0).toLocaleString()} ₫
+                  {isEditingOrder 
+                    ? (editOrderItems.reduce((sum, i) => sum + (i.qty * i.unitPrice), 0) - editOrderDiscount + editOrderShippingFee).toLocaleString() 
+                    : selectedOrder.totalPrice.toLocaleString()} ₫
                 </span>
               </div>
             </div>
@@ -586,13 +627,40 @@ export function OrderManagement() {
                 </table>
               </div>
 
-              {/* Subtotal */}
-              <div className="text-right">
-                <span className="text-xs font-bold uppercase tracking-widest text-gray-500 mr-4">Estimated Total</span>
-                <span className="text-2xl font-black font-mono">
-                  {newOrderItems.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0).toLocaleString()} ₫
-                </span>
+              {/* Total Calculation Area */}
+              <div className="flex justify-end pt-4">
+                <div className="w-2/3 lg:w-1/2">
+                  <div className="flex justify-between items-center mb-2 text-sm uppercase font-bold text-gray-600">
+                    <span>Subtotal</span>
+                    <span className="font-mono text-black">
+                      {newOrderItems.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0).toLocaleString()} ₫
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center mb-2 text-sm uppercase font-bold text-red-600">
+                    <span>Discount</span>
+                    <div className="flex items-center gap-1">
+                      <span>-</span>
+                      <input type="number" min="0" value={newOrder.discount} onChange={(e) => setNewOrder({...newOrder, discount: parseInt(e.target.value) || 0})} className="w-24 p-1 border border-red-400 text-right outline-none focus:border-red-600 font-mono text-black bg-white" />
+                      <span className="text-black">₫</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center mb-2 text-sm uppercase font-bold text-gray-600">
+                    <span>Shipping Fee</span>
+                    <div className="flex items-center gap-1">
+                      <span>+</span>
+                      <input type="number" min="0" value={newOrder.shippingFee} onChange={(e) => setNewOrder({...newOrder, shippingFee: parseInt(e.target.value) || 0})} className="w-24 p-1 border border-gray-400 text-right outline-none focus:border-black font-mono text-black bg-white" />
+                      <span className="text-black">₫</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center mt-4 pt-2 border-t border-black text-xl font-black uppercase tracking-widest">
+                    <span>Est. Total</span>
+                    <span className="font-mono text-black">
+                      {(newOrderItems.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0) - newOrder.discount + newOrder.shippingFee).toLocaleString()} ₫
+                    </span>
+                  </div>
+                </div>
               </div>
+
             </div>
           </div>
 
@@ -619,7 +687,7 @@ export function OrderManagement() {
                 {approvalAction === "approve" ? "Confirm Approval" : "Reject Order"}
               </h2>
               <p className="font-mono text-sm mt-2 p-2 bg-gray-100 border border-black">
-                ID: <strong>{selectedOrder.id}</strong> | Value: <strong>{selectedOrder.totalValue.toLocaleString()} ₫</strong>
+                ID: <strong>{selectedOrder.id}</strong> | Value: <strong>{selectedOrder.totalPrice.toLocaleString()} ₫</strong>
               </p>
             </div>
             <div className="mb-6">
