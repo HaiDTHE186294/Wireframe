@@ -16,6 +16,7 @@ import { PromotionManagement } from "./pages/Promotion";
 import { CategoryManagement } from "./pages/category";
 import { BlogManagement } from "./pages/Blogs";
 import { HomepageManagement } from "./pages/HomepageManagement";
+import { ExportProduct } from "./pages/ExportProduct";
 import { NotFound } from "./pages/NotFound";
 
 export const router = createBrowserRouter([
@@ -29,6 +30,7 @@ export const router = createBrowserRouter([
       { path: "product-catalog", Component: ProductCatalog },
       { path: "production-execution", Component: ProductionExecution },
       { path: "stock-ledger", Component: StockLedger },
+      { path: "export-management", Component: ExportProduct },
       { path: "traceability", Component: Traceability },
       { path: "order-management", Component: OrderManagement },
       { path: "customer-crm", Component: CustomerCRM },

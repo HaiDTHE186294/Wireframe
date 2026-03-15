@@ -25,6 +25,7 @@ const menuGroups = [
       { path: "/materials", label: "Materials" },
       { path: "/production-execution", label: "Production Execution" },
       { path: "/stock-ledger", label: "Stock Ledger" },
+      { path: "/export-management", label: "Export Product" },
       { path: "/traceability", label: "Traceability" },
     ]
   },
