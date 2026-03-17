@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Search, Plus, Edit, ArrowLeft, Trash2, Check, Image as ImageIcon, Link as LinkIcon, Eye, Code } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Search, Plus, Edit, ArrowLeft, Trash2, Check, Image as ImageIcon, Eye, Code, Bold, Italic, Underline, Heading1, Heading2, List, ListOrdered } from "lucide-react";
 import { Pagination } from "../components/Pagination";
 
 // --- ENUMS & INTERFACES ---
@@ -47,6 +47,8 @@ export function BlogManagement() {
   const [isEditMode, setIsEditMode] = useState(false); // Trạng thái Toggle Xem <-> Sửa
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [previewHtml, setPreviewHtml] = useState(false); // Toggle xem trước HTML khi đang edit
+  
+  const textareaRef = useRef<HTMLTextAreaElement>(null); // Dùng để xử lý insert HTML tags
   
   const initialFormState: Partial<Blog> = {
     title: "", content: "", category: BlogCategory.KNOWLEDGE, thumbnail: "", thumbnailType: "URL", status: BlogStatus.DRAFT
@@ -115,14 +117,14 @@ export function BlogManagement() {
   const handleOpenDetail = (blog: Blog) => {
     setFormData(blog);
     setIsCreatingNew(false);
-    setIsEditMode(false); // Mở mặc định ở chế độ XEM (View Detail)
+    setIsEditMode(false); 
     setCurrentView("form");
   };
 
   const handleOpenCreate = () => {
     setFormData(initialFormState);
     setIsCreatingNew(true);
-    setIsEditMode(true); // Tạo mới thì bắt buộc phải ở chế độ SỬA
+    setIsEditMode(true); 
     setPreviewHtml(false);
     setCurrentView("form");
   };
@@ -148,7 +150,6 @@ export function BlogManagement() {
       setBlogs(blogs.map(b => b.id === formData.id ? { ...b, ...formData, updated_at: timestamp } as Blog : b));
     }
     
-    // Lưu xong thì quay về chế độ XEM (View) của chính bài viết đó
     setIsCreatingNew(false);
     setIsEditMode(false);
   };
@@ -164,6 +165,32 @@ export function BlogManagement() {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, statusFilter, categoryFilter]);
+
+  // --- RICH TEXT EDITOR HANDLER ---
+  const insertTag = (openTag: string, closeTag: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = formData.content?.substring(start, end) || "";
+    
+    // Nếu chưa chọn chữ nào, chèn 1 thẻ trống với placeholder
+    const textToInsert = selectedText ? selectedText : "your text here";
+    const newContent = 
+      (formData.content || "").substring(0, start) + 
+      openTag + textToInsert + closeTag + 
+      (formData.content || "").substring(end);
+      
+    setFormData({ ...formData, content: newContent });
+
+    // Focus lại vào textarea sau khi chèn
+    setTimeout(() => {
+      textarea.focus();
+      // Bôi đen phần text ở giữa thẻ để user gõ đè
+      textarea.setSelectionRange(start + openTag.length, start + openTag.length + textToInsert.length);
+    }, 0);
+  };
 
   // --- RENDER HELPERS ---
   const getStatusDisplay = (status: BlogStatus) => {
@@ -184,7 +211,7 @@ export function BlogManagement() {
   // ==========================================
   if (currentView === "list") {
     const filteredBlogs = blogs.filter(b => 
-      b.status !== BlogStatus.DELETED && // Ẩn các bài đã xóa khỏi view mặc định
+      b.status !== BlogStatus.DELETED && 
       (statusFilter === "ALL" || b.status === statusFilter) &&
       (categoryFilter === "ALL" || b.category === categoryFilter) &&
       (b.title.toLowerCase().includes(searchTerm.toLowerCase()) || b.author.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -316,7 +343,7 @@ export function BlogManagement() {
   // ==========================================
   if (currentView === "form") {
     return (
-      <div className="bg-white text-black pb-10">
+      <div className="bg-white text-black pb-10 max-w-6xl mx-auto">
         
         {/* Header Toolbar */}
         <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-black sticky top-0 bg-white z-10 pt-4">
@@ -388,7 +415,7 @@ export function BlogManagement() {
             )}
 
             {/* Khung render HTML thực tế */}
-            <div className="font-sans leading-relaxed text-sm [&>h2]:text-xl [&>h2]:font-bold [&>h2]:uppercase [&>h2]:mt-8 [&>h2]:mb-4 [&>h2]:border-b [&>h2]:border-black [&>h3]:text-lg [&>h3]:font-bold [&>h3]:mt-6 [&>h3]:mb-2 [&>p]:mb-4 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:mb-4">
+            <div className="font-sans leading-relaxed text-sm [&>h1]:text-2xl [&>h1]:font-black [&>h1]:uppercase [&>h1]:mt-8 [&>h1]:mb-4 [&>h1]:border-b-2 [&>h1]:border-black [&>h2]:text-xl [&>h2]:font-bold [&>h2]:uppercase [&>h2]:mt-6 [&>h2]:mb-3 [&>h2]:border-b [&>h2]:border-black [&>h3]:text-lg [&>h3]:font-bold [&>h3]:mt-4 [&>h3]:mb-2 [&>p]:mb-4 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:mb-4 [&>ol]:list-decimal [&>ol]:pl-5 [&>ol]:mb-4">
               <div dangerouslySetInnerHTML={{ __html: formData.content || "<p class='italic text-gray-400'>No content available.</p>" }} />
             </div>
           </div>
@@ -396,137 +423,138 @@ export function BlogManagement() {
         
         // ================= MODE: EDIT / CREATE =================
         (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left Column: Form Inputs */}
-            <div className="lg:col-span-2 space-y-6">
+          <div className="flex flex-col gap-8">
+            {/* Top Section: Meta & Settings */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               
-              {/* Title & Category */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="md:col-span-3">
+              <div className="md:col-span-2 space-y-6">
+                {/* Title */}
+                <div>
                   <label className="block text-xs font-bold uppercase mb-2">Article Title *</label>
                   <input 
                     type="text" 
                     value={formData.title} 
                     onChange={(e) => setFormData({...formData, title: e.target.value})} 
                     placeholder="Enter a captivating title..."
-                    className="w-full p-3 border-2 border-black text-lg font-bold outline-none focus:border-dashed transition-all" 
+                    className="w-full p-4 border-2 border-black text-xl font-black outline-none focus:border-dashed transition-all bg-white" 
                   />
                 </div>
-                <div className="md:col-span-1">
-                  <label className="block text-xs font-bold uppercase mb-2">Category *</label>
-                  <select 
-                    value={formData.category}
-                    onChange={(e) => setFormData({...formData, category: e.target.value as BlogCategory})}
-                    className="w-full p-3 border-2 border-black text-sm font-bold uppercase outline-none focus:border-dashed transition-all bg-white"
-                  >
-                    {Object.values(BlogCategory).map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* HTML Content Editor (Wireframe level config) */}
-              <div>
-                <div className="flex justify-between items-end mb-2">
-                  <label className="block text-xs font-bold uppercase">HTML Content Configuration *</label>
-                  <button 
-                    onClick={() => setPreviewHtml(!previewHtml)}
-                    className="text-[10px] font-bold uppercase border border-black px-2 py-1 hover:bg-gray-100 flex items-center gap-1"
-                  >
-                    {previewHtml ? <Code size={12}/> : <Eye size={12}/>}
-                    {previewHtml ? "Show Source" : "Live Preview"}
-                  </button>
-                </div>
                 
-                {previewHtml ? (
-                  <div className="w-full p-4 border-2 border-black min-h-[400px] overflow-auto bg-gray-50">
-                    <div className="font-sans text-sm [&>h2]:text-xl [&>h2]:font-bold [&>h2]:uppercase [&>h2]:mt-6 [&>h2]:mb-2 [&>h2]:border-b [&>h2]:border-black [&>p]:mb-4" 
-                         dangerouslySetInnerHTML={{ __html: formData.content || "<p class='text-gray-400 font-mono text-xs'>Preview area...</p>" }} />
-                  </div>
-                ) : (
-                  <textarea 
-                    value={formData.content} 
-                    onChange={(e) => setFormData({...formData, content: e.target.value})} 
-                    placeholder="<h2>Write your heading</h2><p>Write your paragraph here...</p>"
-                    className="w-full p-4 border-2 border-black text-sm font-mono leading-relaxed min-h-[400px] outline-none focus:border-dashed transition-all bg-white" 
-                  />
-                )}
-                <p className="text-[10px] font-bold uppercase text-gray-500 mt-2">Supports raw HTML tags (h2, p, strong, ul, li).</p>
-              </div>
-            </div>
-
-            {/* Right Column: Meta & Config */}
-            <div className="lg:col-span-1 space-y-6">
-              
-              {/* Publishing Status */}
-              <div className="border border-black p-5 bg-white">
-                <h3 className="text-xs font-bold uppercase border-b border-black pb-2 mb-4">Publishing Status</h3>
-                <div className="flex flex-col gap-3">
-                  {Object.values(BlogStatus).map(status => (
-                    <label key={status} className={`flex items-center gap-3 p-2 border cursor-pointer transition-all ${formData.status === status ? 'border-2 border-black font-bold' : 'border-transparent hover:border-gray-300'}`}>
-                      <input 
-                        type="radio" 
-                        name="status" 
-                        value={status} 
-                        checked={formData.status === status} 
-                        onChange={() => setFormData({...formData, status: status as BlogStatus})}
-                        className="w-4 h-4 accent-black"
-                      />
-                      <span className="text-sm uppercase">{status}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Thumbnail Configuration */}
-              <div className="border border-black p-5 bg-white">
-                <h3 className="text-xs font-bold uppercase border-b border-black pb-2 mb-4">Cover Image (Thumbnail)</h3>
-                
-                <div className="flex border border-black mb-4">
-                  <button 
-                    onClick={() => setFormData({...formData, thumbnailType: "URL", thumbnail: ""})}
-                    className={`flex-1 py-2 text-xs font-bold uppercase flex items-center justify-center gap-2 border-r border-black transition-colors ${formData.thumbnailType === 'URL' ? 'bg-gray-100 border-b-2 border-black' : 'bg-white'}`}
-                  >
-                    <LinkIcon size={12}/> Web URL
-                  </button>
-                  <button 
-                    onClick={() => setFormData({...formData, thumbnailType: "UPLOAD", thumbnail: ""})}
-                    className={`flex-1 py-2 text-xs font-bold uppercase flex items-center justify-center gap-2 transition-colors ${formData.thumbnailType === 'UPLOAD' ? 'bg-gray-100 border-b-2 border-black' : 'bg-white'}`}
-                  >
-                    <ImageIcon size={12}/> Upload
-                  </button>
-                </div>
-
-                {formData.thumbnailType === "URL" ? (
+                {/* Settings Block */}
+                <div className="grid grid-cols-2 gap-6 border-t border-black pt-4">
                   <div>
-                    <input 
-                      type="text" 
-                      placeholder="https://example.com/image.jpg"
-                      value={formData.thumbnail}
-                      onChange={(e) => setFormData({...formData, thumbnail: e.target.value})}
-                      className="w-full p-2 border border-black text-xs font-mono outline-none focus:border-2 focus:border-black"
-                    />
+                    <label className="block text-xs font-bold uppercase mb-2">Category *</label>
+                    <select 
+                      value={formData.category}
+                      onChange={(e) => setFormData({...formData, category: e.target.value as BlogCategory})}
+                      className="w-full p-3 border-2 border-black text-sm font-bold uppercase outline-none focus:border-dashed transition-all bg-white"
+                    >
+                      {Object.values(BlogCategory).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
                   </div>
-                ) : (
-                  <div className="border-2 border-dashed border-black p-6 text-center hover:bg-gray-50 cursor-pointer transition-colors">
-                    <ImageIcon size={24} className="mx-auto mb-2 text-black" />
-                    <span className="text-xs font-bold uppercase">Click to select file</span>
-                    <p className="text-[10px] font-mono mt-1 text-gray-500">Max 2MB. JPG, PNG.</p>
-                    <input type="file" className="hidden" />
+                  <div>
+                    <h3 className="text-xs font-bold uppercase mb-2">Publishing Status</h3>
+                    <select 
+                      value={formData.status}
+                      onChange={(e) => setFormData({...formData, status: e.target.value as BlogStatus})}
+                      className="w-full p-3 border-2 border-black text-sm font-bold uppercase outline-none focus:border-dashed transition-all bg-white"
+                    >
+                      {Object.values(BlogStatus).map(status => (
+                        <option key={status} value={status}>{status}</option>
+                      ))}
+                    </select>
                   </div>
-                )}
+                </div>
+              </div>
 
-                {/* Preview Image */}
-                {formData.thumbnail && formData.thumbnailType === "URL" && (
+              {/* Right Column: Thumbnail */}
+              <div className="md:col-span-1 border border-black p-5 bg-white h-full flex flex-col">
+                <h3 className="text-xs font-bold uppercase border-b border-black pb-2 mb-4">Cover Image</h3>
+                <label className="flex-1 block border-2 border-dashed border-black p-6 text-center hover:bg-gray-50 cursor-pointer transition-colors flex flex-col items-center justify-center">
+                  <ImageIcon size={32} className="mx-auto mb-2 text-black" />
+                  <span className="block text-xs font-bold uppercase mb-1">Upload Thumbnail</span>
+                  <p className="text-[10px] font-mono mt-1 text-gray-500">Max 2MB. JPG, PNG</p>
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = () => setFormData({...formData, thumbnail: reader.result as string, thumbnailType: "UPLOAD"});
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="hidden" 
+                  />
+                </label>
+                {formData.thumbnail && (
                   <div className="mt-4 border border-black p-1">
-                    <p className="text-[10px] font-bold uppercase mb-1">Preview:</p>
-                    <img src={formData.thumbnail} alt="Preview" className="w-full h-32 object-cover grayscale border border-gray-200" onError={(e) => (e.currentTarget.src = "https://via.placeholder.com/400x200?text=Invalid+Image+URL")} />
+                    <img src={formData.thumbnail} alt="Preview" className="w-full h-24 object-cover grayscale border border-gray-200" />
                   </div>
                 )}
               </div>
-
             </div>
+
+            {/* Bottom Section: HTML Content Editor (Rich Text Emulator) */}
+            <div className="border-t-2 border-black pt-8">
+              <div className="flex justify-between items-end mb-2">
+                <div>
+                  <h3 className="text-lg font-black uppercase">Story Content</h3>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">HTML Editor Mode</p>
+                </div>
+                <button 
+                  onClick={() => setPreviewHtml(!previewHtml)}
+                  className="text-[10px] font-bold uppercase border-2 border-black px-4 py-2 bg-black text-white hover:invert flex items-center gap-2 transition-all"
+                >
+                  {previewHtml ? <Code size={14}/> : <Eye size={14}/>}
+                  {previewHtml ? "Back to Editor" : "Live Preview"}
+                </button>
+              </div>
+              
+              {/* Editor Toolbar */}
+              {!previewHtml && (
+                <div className="flex flex-wrap gap-2 border-2 border-b-0 border-black bg-gray-100 p-2">
+                  <div className="flex gap-1 border-r-2 border-black pr-2">
+                    <button onClick={() => insertTag("<strong>", "</strong>")} className="p-2 bg-white border border-black hover:bg-gray-200 font-bold" title="Bold"><Bold size={16}/></button>
+                    <button onClick={() => insertTag("<em>", "</em>")} className="p-2 bg-white border border-black hover:bg-gray-200 italic" title="Italic"><Italic size={16}/></button>
+                    <button onClick={() => insertTag("<u>", "</u>")} className="p-2 bg-white border border-black hover:bg-gray-200 underline" title="Underline"><Underline size={16}/></button>
+                  </div>
+                  <div className="flex gap-1 border-r-2 border-black pr-2">
+                    <button onClick={() => insertTag("<h1>", "</h1>")} className="p-2 bg-white border border-black hover:bg-gray-200 font-black" title="Heading 1"><Heading1 size={16}/></button>
+                    <button onClick={() => insertTag("<h2>", "</h2>")} className="p-2 bg-white border border-black hover:bg-gray-200 font-bold" title="Heading 2"><Heading2 size={16}/></button>
+                    <button onClick={() => insertTag("<p>", "</p>")} className="px-3 py-2 bg-white border border-black hover:bg-gray-200 font-bold text-xs" title="Paragraph">P</button>
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => insertTag("<ul>\n  <li>", "</li>\n</ul>")} className="p-2 bg-white border border-black hover:bg-gray-200" title="Bullet List"><List size={16}/></button>
+                    <button onClick={() => insertTag("<ol>\n  <li>", "</li>\n</ol>")} className="p-2 bg-white border border-black hover:bg-gray-200" title="Numbered List"><ListOrdered size={16}/></button>
+                  </div>
+                </div>
+              )}
+              
+              {/* Editor Workspace */}
+              {previewHtml ? (
+                <div className="w-full p-8 border-2 border-black min-h-[500px] overflow-auto bg-gray-50">
+                  <div className="font-sans text-sm [&>h1]:text-2xl [&>h1]:font-black [&>h1]:uppercase [&>h1]:mt-8 [&>h1]:mb-4 [&>h1]:border-b-2 [&>h1]:border-black [&>h2]:text-xl [&>h2]:font-bold [&>h2]:uppercase [&>h2]:mt-6 [&>h2]:mb-3 [&>h2]:border-b [&>h2]:border-black [&>h3]:text-lg [&>h3]:font-bold [&>h3]:mt-4 [&>h3]:mb-2 [&>p]:mb-4 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:mb-4 [&>ol]:list-decimal [&>ol]:pl-5 [&>ol]:mb-4" 
+                       dangerouslySetInnerHTML={{ __html: formData.content || "<p class='text-gray-400 font-mono text-xs italic uppercase'>No content yet...</p>" }} />
+                </div>
+              ) : (
+                <textarea 
+                  ref={textareaRef}
+                  value={formData.content} 
+                  onChange={(e) => setFormData({...formData, content: e.target.value})} 
+                  placeholder="<h2>Start your story here...</h2>&#10;<p>Write your amazing content...</p>"
+                  className="w-full p-6 border-2 border-black text-sm font-mono leading-relaxed min-h-[500px] outline-none focus:bg-yellow-50 transition-colors bg-white" 
+                />
+              )}
+              <div className="flex justify-between items-center mt-2">
+                <p className="text-[10px] font-bold uppercase text-gray-500">Supports raw HTML tags. Use the toolbar for quick formatting.</p>
+                <p className="text-[10px] font-mono text-gray-400">Word Count: {(formData.content || "").split(/\s+/).filter(w => w.length > 0).length}</p>
+              </div>
+            </div>
+
           </div>
         )}
       </div>

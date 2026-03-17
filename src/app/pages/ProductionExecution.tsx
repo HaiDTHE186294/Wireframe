@@ -10,7 +10,7 @@ export function ProductionExecution() {
   const [targetVariant, setTargetVariant] = useState("");
   const [variantSearch, setVariantSearch] = useState(""); // State search thành phẩm
 
-  const [roastProfile, setRoastProfile] = useState("");
+  const [manufacturingDate, setManufacturingDate] = useState(new Date().toISOString().split('T')[0]);
   const [finishedQty, setFinishedQty] = useState("");
   const [lossQty, setLossQty] = useState("");
 
@@ -206,23 +206,17 @@ export function ProductionExecution() {
             </div>
           </div>
 
-          {/* Step 2: Roasting */}
+          {/* Step 2: Production Details (Khớp DB: Manufacturing Date) */}
           <div className="border border-black p-4 bg-white">
-            <h2 className="font-bold uppercase text-sm mb-4 border-b border-black pb-2 tracking-wider">Step 2: Roasting Config</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold uppercase mb-1">Roast Profile</label>
-                <select value={roastProfile} onChange={(e) => setRoastProfile(e.target.value)} className="w-full px-3 py-2 border border-black bg-white text-sm font-bold uppercase">
-                  <option value="">-- SELECT --</option>
-                  <option value="light">Light Roast</option>
-                  <option value="medium">Medium Roast</option>
-                  <option value="dark">Dark Roast</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold uppercase mb-1">Production Date</label>
-                <input type="date" defaultValue={new Date().toISOString().split('T')[0]} className="w-full px-3 py-2 border border-black text-sm font-mono font-bold" />
-              </div>
+            <h2 className="font-bold uppercase text-sm mb-4 border-b border-black pb-2 tracking-wider">Step 2: Production Details</h2>
+            <div>
+              <label className="block text-xs font-bold uppercase mb-1">Manufacturing Date *</label>
+              <input 
+                type="date" 
+                value={manufacturingDate}
+                onChange={(e) => setManufacturingDate(e.target.value)}
+                className="w-full px-3 py-2 border border-black text-sm font-mono font-bold" 
+              />
             </div>
           </div>
         </div>
@@ -305,7 +299,7 @@ export function ProductionExecution() {
             <div className="space-y-4">
               <div className="flex justify-between items-end border-b border-dashed border-black pb-3">
                 <span className="text-xs uppercase font-bold tracking-widest">Generated Lot Code</span>
-                <span className="font-mono text-lg font-bold">LOT-{new Date().toISOString().split('T')[0].replace(/-/g, '')}-01</span>
+                <span className="font-mono text-lg font-bold">BAT-{manufacturingDate.replace(/-/g, '')}-01</span>
               </div>
 
               <div className="flex justify-between items-end border-b border-dashed border-black pb-3">

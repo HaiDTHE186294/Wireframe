@@ -550,8 +550,32 @@ export function ProductCatalog() {
                   {newProduct.thumbnailUrl ? <img src={newProduct.thumbnailUrl} alt="thumb" className="w-full h-full object-cover" /> : <ImageIcon className="text-gray-300" />}
                 </div>
                 <div className="flex-1">
-                  <label className="block text-xs font-bold uppercase mb-1">Thumbnail URL</label>
-                  <input type="text" value={newProduct.thumbnailUrl || ""} onChange={(e) => setNewProduct({ ...newProduct, thumbnailUrl: e.target.value })} readOnly={!isEditable} className={`w-full px-3 py-2 border border-black text-sm font-mono ${!isEditable ? 'bg-gray-100 outline-none' : ''}`} />
+                  <label className="block text-xs font-bold uppercase mb-1">Thumbnail Image</label>
+                  {isEditable ? (
+                    <div className="border-2 border-dashed border-black p-4 text-center hover:bg-gray-50 cursor-pointer transition-colors">
+                      <ImageIcon size={24} className="mx-auto mb-2 text-gray-400" />
+                      <p className="text-xs font-bold uppercase mb-1">Upload Thumbnail</p>
+                      <p className="text-[10px] text-gray-500">Click to browse or drag & drop</p>
+                      <input 
+                        type="file" 
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = () => setNewProduct({ ...newProduct, thumbnailUrl: reader.result as string });
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="hidden" 
+                        onClick={(e) => e.currentTarget.parentElement?.click()}
+                      />
+                    </div>
+                  ) : (
+                    <div className="px-3 py-2 border border-black bg-gray-100 text-sm font-mono text-gray-500">
+                      {newProduct.thumbnailUrl ? "Image uploaded" : "No thumbnail"}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -614,9 +638,29 @@ export function ProductCatalog() {
             <h3 className="text-sm font-black uppercase mb-4">Additional Images (Gallery)</h3>
             <div className="border border-black p-4 bg-gray-50">
               {isEditable && (
-                <div className="flex gap-2 mb-4">
-                  <input type="text" value={tempImageUrl} onChange={(e) => setTempImageUrl(e.target.value)} className="flex-1 px-3 py-2 border border-black text-sm font-mono" placeholder="Paste image URL here..." />
-                  <button type="button" onClick={handleAddGalleryImage} className="px-4 py-2 border border-black bg-black text-white hover:bg-gray-800 text-sm font-bold uppercase whitespace-nowrap">Add Image</button>
+                <div className="mb-4">
+                  <label className="block border-2 border-dashed border-black p-6 text-center hover:bg-gray-50 cursor-pointer transition-colors">
+                    <ImageIcon size={32} className="mx-auto mb-2 text-gray-400" />
+                    <p className="text-xs font-bold uppercase mb-1">Upload Gallery Image</p>
+                    <p className="text-[10px] text-gray-500">Click to browse or drag & drop</p>
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            if (reader.result) {
+                              setNewProduct({ ...newProduct, imageUrls: [...newProduct.imageUrls, reader.result as string] });
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="hidden" 
+                    />
+                  </label>
                 </div>
               )}
               {newProduct.imageUrls.length > 0 ? (
