@@ -1,5 +1,5 @@
 import { useState, useMemo, Fragment } from "react";
-import { Plus, Search, Upload, Download, Eye, Lock, Unlock, AlertCircle, Edit, Activity, Copy, Save, X } from "lucide-react";
+import { Plus, Search, Upload, Eye, Lock, Unlock, AlertCircle, Edit, Activity, Copy, Save, X } from "lucide-react";
 import { Pagination } from "../components/Pagination";
 
 // --- INTERFACES ---
@@ -263,9 +263,6 @@ export function Materials() {
               </button>
               <button onClick={handleOpenImport} className="px-4 py-2 border border-black bg-black text-white hover:bg-gray-800 flex items-center gap-2 text-sm font-bold uppercase">
                 <Upload size={16} /> Import (New Batch)
-              </button>
-              <button onClick={() => setViewMode("EXPORT")} className="px-4 py-2 border border-black bg-white hover:bg-gray-100 flex items-center gap-2 text-sm font-bold uppercase">
-                <Download size={16} /> Export (Use Batch)
               </button>
             </div>
           </div>
