@@ -1,5 +1,5 @@
 import { useState, useMemo, Fragment } from "react";
-import { Plus, Search, Upload, Download, Eye, Lock, Unlock, AlertCircle, Edit, Activity, Copy } from "lucide-react";
+import { Plus, Search, Upload, Download, Eye, Lock, Unlock, AlertCircle, Edit, Activity, Copy, Save, X } from "lucide-react";
 import { Pagination } from "../components/Pagination";
 
 // --- INTERFACES ---
@@ -33,7 +33,7 @@ interface MaterialBatch {
   sensoryData?: SensoryData; // Chuyển Sensory xuống Batch
 }
 
-type ViewMode = "LIST" | "ADD_MATERIAL" | "DETAIL_MATERIAL" | "IMPORT" | "EXPORT" | "BATCHES";
+type ViewMode = "LIST" | "ADD_MATERIAL" | "DETAIL_MATERIAL" | "IMPORT" | "EXPORT" | "BATCHES" | "STOCK_LEDGER";
 
 const defaultSensory: SensoryData = { bitter: 5, sweet: 5, sour: 5, body: 5, caffein: 0, flavor: "" };
 
@@ -50,8 +50,10 @@ export function Materials() {
   const [editingMaterial, setEditingMaterial] = useState<MaterialMaster | null>(null);
   const [selectedMaterialForBatches, setSelectedMaterialForBatches] = useState<MaterialMaster | null>(null);
   
-  // Trạng thái mở rộng xem Sensory ở màn Batch
+  // Trạng thái mở rộng xem và sửa Sensory ở màn Batch
   const [expandedBatchSensory, setExpandedBatchSensory] = useState<string | null>(null);
+  const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
+  const [editingSensoryData, setEditingSensoryData] = useState<SensoryData>(defaultSensory);
 
   // Pagination
   const [currentPageMaterials, setCurrentPageMaterials] = useState(1);
@@ -125,7 +127,27 @@ export function Materials() {
   const handleViewBatches = (material: MaterialMaster) => {
     setSelectedMaterialForBatches(material);
     setExpandedBatchSensory(null);
+    setEditingBatchId(null);
     setViewMode("BATCHES");
+  };
+
+  // --- HANDLERS: SENSORY EDIT IN BATCH ---
+  const handleStartEditBatchSensory = (batch: MaterialBatch) => {
+    setEditingBatchId(batch.id);
+    setEditingSensoryData(batch.sensoryData ? { ...batch.sensoryData } : { ...defaultSensory });
+  };
+
+  const handleCancelEditBatchSensory = () => {
+    setEditingBatchId(null);
+  };
+
+  const handleSaveBatchSensory = () => {
+    if (editingBatchId) {
+      setBatches(batches.map(b => 
+        b.id === editingBatchId ? { ...b, sensoryData: editingSensoryData } : b
+      ));
+      setEditingBatchId(null);
+    }
   };
 
   // --- HANDLERS: IMPORT BATCH & SENSORY ---
@@ -369,9 +391,16 @@ export function Materials() {
                         <td className="p-2 text-center">
                             <div className="flex justify-center gap-2">
                               <button 
-                                onClick={() => setExpandedBatchSensory(expandedBatchSensory === batch.id ? null : batch.id)}
+                                onClick={() => {
+                                  if (expandedBatchSensory === batch.id) {
+                                    setExpandedBatchSensory(null);
+                                    setEditingBatchId(null);
+                                  } else {
+                                    setExpandedBatchSensory(batch.id);
+                                  }
+                                }}
                                 disabled={!batch.sensoryData}
-                                className="p-1.5 border border-black hover:bg-gray-200 disabled:opacity-30 disabled:hover:bg-transparent"
+                                className={`p-1.5 border border-black hover:bg-gray-200 disabled:opacity-30 disabled:hover:bg-transparent ${expandedBatchSensory === batch.id ? 'bg-gray-200' : ''}`}
                                 title={batch.sensoryData ? "View Sensory Profile" : "No sensory data for this batch"}
                               >
                                 <Activity size={14}/>
@@ -387,19 +416,78 @@ export function Materials() {
                             </div>
                         </td>
                       </tr>
-                      {/* Accordion Row for Sensory Profile */}
+                      
+                      {/* Accordion Row for Sensory Profile Edit/View */}
                       {expandedBatchSensory === batch.id && batch.sensoryData && (
                         <tr className="border-b border-black bg-gray-50">
                           <td colSpan={6} className="p-4">
-                             <div className="border border-black p-4 bg-white flex gap-6 items-center">
-                                <SensoryRadar sensory={batch.sensoryData} />
-                                <div className="flex-1 grid grid-cols-2 gap-4 text-xs font-mono uppercase">
-                                  <div><span className="font-bold text-gray-500 mr-2">Bitter:</span> {batch.sensoryData.bitter}/10</div>
-                                  <div><span className="font-bold text-gray-500 mr-2">Sweet:</span> {batch.sensoryData.sweet}/10</div>
-                                  <div><span className="font-bold text-gray-500 mr-2">Sour:</span> {batch.sensoryData.sour}/10</div>
-                                  <div><span className="font-bold text-gray-500 mr-2">Body:</span> {batch.sensoryData.body}/10</div>
-                                  <div><span className="font-bold text-gray-500 mr-2">Caffeine:</span> {batch.sensoryData.caffein}%</div>
-                                  <div className="col-span-2"><span className="font-bold text-gray-500 mr-2">Flavor Notes:</span> {batch.sensoryData.flavor}</div>
+                             <div className="border border-black p-4 bg-white">
+                                <div className="flex justify-between items-center mb-4 border-b border-gray-200 pb-2">
+                                  <h4 className="font-bold uppercase text-xs">Sensory Profile Details</h4>
+                                  {editingBatchId === batch.id ? (
+                                    <div className="flex gap-2">
+                                      <button onClick={handleCancelEditBatchSensory} className="px-3 py-1 border border-black bg-white hover:bg-gray-100 flex items-center gap-1 text-[10px] font-bold uppercase"><X size={12} /> Cancel</button>
+                                      <button onClick={handleSaveBatchSensory} className="px-3 py-1 border border-black bg-black text-white hover:invert flex items-center gap-1 text-[10px] font-bold uppercase"><Save size={12} /> Save</button>
+                                    </div>
+                                  ) : (
+                                    <button onClick={() => handleStartEditBatchSensory(batch)} className="px-3 py-1 border border-black bg-white hover:bg-gray-100 flex items-center gap-1 text-[10px] font-bold uppercase">
+                                      <Edit size={12} /> Edit Profile
+                                    </button>
+                                  )}
+                                </div>
+                                
+                                <div className="flex gap-6 items-center">
+                                  <SensoryRadar sensory={editingBatchId === batch.id ? editingSensoryData : batch.sensoryData} />
+                                  <div className="flex-1 grid grid-cols-2 gap-4 text-xs font-mono uppercase">
+                                    {['bitter', 'sweet', 'sour', 'body'].map((attr) => {
+                                      const isEditing = editingBatchId === batch.id;
+                                      const val = isEditing ? editingSensoryData[attr as keyof SensoryData] : batch.sensoryData![attr as keyof SensoryData];
+                                      return (
+                                        <div key={attr} className="flex flex-col gap-1">
+                                          <div className="flex justify-between">
+                                            <span className="font-bold text-gray-500">{attr}:</span>
+                                            <span>{val}/10</span>
+                                          </div>
+                                          {isEditing && (
+                                            <input 
+                                              type="range" min="1" max="10" step="1" 
+                                              value={val}
+                                              onChange={(e) => setEditingSensoryData({ ...editingSensoryData, [attr]: parseInt(e.target.value) })}
+                                              className="w-full accent-black cursor-pointer"
+                                            />
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                    
+                                    <div className="flex flex-col gap-1">
+                                      <span className="font-bold text-gray-500">Caffeine:</span>
+                                      {editingBatchId === batch.id ? (
+                                        <input 
+                                          type="number" min="0" max="100" step="0.1"
+                                          value={editingSensoryData.caffein}
+                                          onChange={(e) => setEditingSensoryData({ ...editingSensoryData, caffein: parseFloat(e.target.value) || 0 })}
+                                          className="p-1 border border-black text-xs font-mono bg-white outline-none"
+                                        />
+                                      ) : (
+                                        <span>{batch.sensoryData.caffein}%</span>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="col-span-2 flex flex-col gap-1">
+                                      <span className="font-bold text-gray-500">Flavor Notes:</span>
+                                      {editingBatchId === batch.id ? (
+                                        <input 
+                                          type="text" 
+                                          value={editingSensoryData.flavor}
+                                          onChange={(e) => setEditingSensoryData({ ...editingSensoryData, flavor: e.target.value })}
+                                          className="p-1 border border-black text-xs font-sans uppercase bg-white outline-none"
+                                        />
+                                      ) : (
+                                        <span className="font-sans">{batch.sensoryData.flavor}</span>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
                              </div>
                           </td>

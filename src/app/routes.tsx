@@ -11,12 +11,12 @@ import { Materials } from "./pages/Materials";
 import { ProductCatalog } from "./pages/ProductCatalog";
 import { ProductionExecution } from "./pages/ProductionExecution";
 import { StockLedger } from "./pages/StockLedger";
+import { ExportProduct } from "./pages/ExportProduct";
 import { Traceability } from "./pages/Traceability";
 import { PromotionManagement } from "./pages/Promotion";
 import { CategoryManagement } from "./pages/category";
 import { BlogManagement } from "./pages/Blogs";
 import { HomepageManagement } from "./pages/HomepageManagement";
-import { ExportProduct } from "./pages/ExportProduct";
 import { NotFound } from "./pages/NotFound";
 
 export const router = createBrowserRouter([
