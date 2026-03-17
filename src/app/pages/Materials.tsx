@@ -555,12 +555,6 @@ export function Materials() {
               <label className="block text-xs font-bold uppercase mb-1">Description</label>
               <textarea value={newMaterial.description} onChange={(e) => setNewMaterial({ ...newMaterial, description: e.target.value })} readOnly={!isEditable} className={`w-full px-3 py-2 border border-black h-24 text-sm resize-none ${!isEditable ? 'bg-gray-100 outline-none' : ''}`} />
             </div>
-            
-            {/* Note about sensory */}
-            <div className="p-3 border border-black bg-gray-50 flex gap-2 items-start mt-4">
-               <AlertCircle size={16} className="mt-0.5 shrink-0" />
-               <p className="text-xs uppercase font-bold text-gray-600">Sensory profiles are no longer managed at the master level. They must be recorded for each specific batch during the import process.</p>
-            </div>
           </div>
 
           {isEditable && (
