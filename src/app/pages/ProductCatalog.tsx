@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import React from "react";
 import {
   Plus,
@@ -15,6 +15,14 @@ import {
   Layers,
   X,
   Globe,
+  Code,
+  Bold,
+  Italic,
+  Underline,
+  Heading1,
+  Heading2,
+  List,
+  ListOrdered
 } from "lucide-react";
 import { Pagination } from "../components/Pagination";
 
@@ -71,12 +79,20 @@ export function ProductCatalog() {
   const [expandedProducts, setExpandedProducts] = useState<string[]>([]);
   const [expandedVariants, setExpandedVariants] = useState<string[]>([]);
   
+  // Toggles cho Rich Text Editor
+  const [previewSummary, setPreviewSummary] = useState(false);
+  const [previewStory, setPreviewStory] = useState(false);
+  
   // --- STATES FORMS ---
   const [showVariantForm, setShowVariantForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ParentProduct | null>(null);
   const [editingVariant, setEditingVariant] = useState<{ productId: string; variant: Variant | null }>({ productId: "", variant: null });
   const [currentProductId, setCurrentProductId] = useState<string>("");
   const [currentProductSensory, setCurrentProductSensory] = useState<SensoryData>(defaultSensory);
+
+  // Refs cho Rich Text Editor
+  const summaryRef = useRef<HTMLTextAreaElement>(null);
+  const storyRef = useRef<HTMLTextAreaElement>(null);
 
   // State tạm để nhập link ảnh vào mảng
   const [tempImageUrl, setTempImageUrl] = useState("");
@@ -94,8 +110,8 @@ export function ProductCatalog() {
     {
       id: "PROD-001",
       name: "Signature Blend",
-      summary: "Our signature coffee blend with balanced flavor profile",
-      story: "<p>Crafted from the finest beans across Vietnam's highlands...</p>",
+      summary: "<p>Our <strong>signature</strong> coffee blend with balanced flavor profile</p>",
+      story: "<h2>The Journey</h2><p>Crafted from the finest beans across Vietnam's highlands...</p>",
       category: "Premium Blends",
       metaTitle: "Signature Blend - Premium Vietnamese Coffee | Katak Coffee",
       metaDescription: "Experience our signature blend coffee with balanced aroma and rich taste",
@@ -197,6 +213,8 @@ export function ProductCatalog() {
     setEditingProduct(null);
     setCurrentProductSensory({ ...defaultSensory });
     setTempImageUrl("");
+    setPreviewSummary(false);
+    setPreviewStory(false);
     setNewProduct({
       id: `PROD-${String(products.length + 1).padStart(3, "0")}`,
       name: "", summary: "", story: "", category: "", metaTitle: "", metaDescription: "", thumbnailUrl: "", imageUrls: [], status: "Active", variants: [],
@@ -209,6 +227,8 @@ export function ProductCatalog() {
     setEditingProduct(product);
     setCurrentProductSensory(product.sensoryData ? { ...product.sensoryData } : { ...defaultSensory });
     setTempImageUrl("");
+    setPreviewSummary(true); // Mở sẵn preview khi vào xem chi tiết
+    setPreviewStory(true);
     setNewProduct({ ...product, imageUrls: product.imageUrls || [] });
     setViewMode("DETAIL_PRODUCT");
     setIsEditable(false);
@@ -241,13 +261,39 @@ export function ProductCatalog() {
       setNewProduct({ ...editingProduct, imageUrls: editingProduct.imageUrls || [] });
       setCurrentProductSensory(editingProduct.sensoryData ? { ...editingProduct.sensoryData } : { ...defaultSensory });
       setIsEditable(false);
+      setPreviewSummary(true);
+      setPreviewStory(true);
     } else {
       setViewMode("LIST");
       setIsEditable(false);
     }
   };
 
-  // --- VARIANT HANDLERS (Giữ nguyên Modal cho Variant vì nó phụ thuộc Product) ---
+  // --- RICH TEXT EDITOR HANDLER ---
+  const insertTag = (field: 'summary' | 'story', openTag: string, closeTag: string) => {
+    const textarea = field === 'summary' ? summaryRef.current : storyRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const content = newProduct[field] || "";
+    const selectedText = content.substring(start, end) || "";
+    
+    const textToInsert = selectedText ? selectedText : "your text here";
+    const newContent = 
+      content.substring(0, start) + 
+      openTag + textToInsert + closeTag + 
+      content.substring(end);
+      
+    setNewProduct({ ...newProduct, [field]: newContent });
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + openTag.length, start + openTag.length + textToInsert.length);
+    }, 0);
+  };
+
+  // --- VARIANT HANDLERS ---
   const handleAddVariant = (productId: string) => {
     setCurrentProductId(productId);
     setEditingVariant({ productId, variant: null });
@@ -518,7 +564,7 @@ export function ProductCatalog() {
             <button onClick={() => setViewMode("LIST")} className="px-4 py-2 border border-black hover:bg-gray-100 font-bold uppercase text-sm">Back to List</button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
             <div className="space-y-4">
               <div className="flex gap-4">
                 <div className="flex-1">
@@ -552,7 +598,7 @@ export function ProductCatalog() {
                 <div className="flex-1">
                   <label className="block text-xs font-bold uppercase mb-1">Thumbnail Image</label>
                   {isEditable ? (
-                    <div className="border-2 border-dashed border-black p-4 text-center hover:bg-gray-50 cursor-pointer transition-colors">
+                    <label className="block border-2 border-dashed border-black p-4 text-center hover:bg-gray-50 cursor-pointer transition-colors">
                       <ImageIcon size={24} className="mx-auto mb-2 text-gray-400" />
                       <p className="text-xs font-bold uppercase mb-1">Upload Thumbnail</p>
                       <p className="text-[10px] text-gray-500">Click to browse or drag & drop</p>
@@ -568,9 +614,8 @@ export function ProductCatalog() {
                           }
                         }}
                         className="hidden" 
-                        onClick={(e) => e.currentTarget.parentElement?.click()}
                       />
-                    </div>
+                    </label>
                   ) : (
                     <div className="px-3 py-2 border border-black bg-gray-100 text-sm font-mono text-gray-500">
                       {newProduct.thumbnailUrl ? "Image uploaded" : "No thumbnail"}
@@ -580,20 +625,95 @@ export function ProductCatalog() {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase mb-1">Summary *</label>
-                <textarea value={newProduct.summary} onChange={(e) => setNewProduct({ ...newProduct, summary: e.target.value })} readOnly={!isEditable} className={`w-full px-3 py-2 border border-black h-20 text-sm ${!isEditable ? 'bg-gray-100 outline-none' : ''}`} />
+            {/* SUMMARY RICH TEXT EDITOR */}
+            <div className="flex flex-col h-full border border-black">
+              <div className="flex justify-between items-center bg-gray-100 border-b border-black p-2">
+                <h3 className="text-xs font-bold uppercase px-2">Short Summary *</h3>
+                {isEditable && (
+                  <button 
+                    onClick={() => setPreviewSummary(!previewSummary)}
+                    className="text-[10px] font-bold uppercase border border-black px-2 py-1 bg-white hover:bg-gray-200 flex items-center gap-1"
+                  >
+                    {previewSummary ? <Code size={12}/> : <Eye size={12}/>}
+                    {previewSummary ? "Edit HTML" : "Live Preview"}
+                  </button>
+                )}
               </div>
-              <div>
-                <label className="block text-xs font-bold uppercase mb-1">Story (HTML)</label>
-                <textarea value={newProduct.story} onChange={(e) => setNewProduct({ ...newProduct, story: e.target.value })} readOnly={!isEditable} className={`w-full px-3 py-2 border border-black h-32 font-mono text-xs ${!isEditable ? 'bg-gray-100 outline-none' : ''}`} />
-              </div>
+              
+              {isEditable && !previewSummary && (
+                <div className="flex flex-wrap gap-1 border-b border-black bg-white p-1">
+                  <button onClick={() => insertTag('summary', "<strong>", "</strong>")} className="p-1 border border-black hover:bg-gray-200 font-bold" title="Bold"><Bold size={14}/></button>
+                  <button onClick={() => insertTag('summary', "<em>", "</em>")} className="p-1 border border-black hover:bg-gray-200 italic" title="Italic"><Italic size={14}/></button>
+                  <button onClick={() => insertTag('summary', "<ul>\n  <li>", "</li>\n</ul>")} className="p-1 border border-black hover:bg-gray-200" title="Bullet List"><List size={14}/></button>
+                </div>
+              )}
+
+              {previewSummary || !isEditable ? (
+                <div className="flex-1 p-3 bg-gray-50 overflow-y-auto text-sm font-sans [&>p]:mb-2 [&>ul]:list-disc [&>ul]:pl-5"
+                     dangerouslySetInnerHTML={{ __html: newProduct.summary || "<p class='italic text-gray-400'>No summary...</p>" }} />
+              ) : (
+                <textarea 
+                  ref={summaryRef}
+                  value={newProduct.summary} 
+                  onChange={(e) => setNewProduct({ ...newProduct, summary: e.target.value })} 
+                  className="flex-1 w-full p-3 border-none text-sm font-mono outline-none resize-none bg-white" 
+                  placeholder="<p>Short description here...</p>"
+                />
+              )}
             </div>
           </div>
 
+          {/* ================= STORY / DESCRIPTION RICH TEXT EDITOR ================= */}
+          <div className="border border-black flex flex-col mb-8">
+            <div className="flex justify-between items-center bg-gray-100 border-b border-black p-2">
+              <h3 className="text-sm font-black uppercase px-2">Detailed Product Story</h3>
+              {isEditable && (
+                <button 
+                  onClick={() => setPreviewStory(!previewStory)}
+                  className="text-xs font-bold uppercase border-2 border-black px-3 py-1.5 bg-black text-white hover:invert flex items-center gap-1 transition-all"
+                >
+                  {previewStory ? <Code size={14}/> : <Eye size={14}/>}
+                  {previewStory ? "HTML Editor" : "Live Preview"}
+                </button>
+              )}
+            </div>
+
+            {isEditable && !previewStory && (
+              <div className="flex flex-wrap gap-2 border-b border-black bg-white p-2">
+                <div className="flex gap-1 border-r-2 border-black pr-2">
+                  <button onClick={() => insertTag('story', "<strong>", "</strong>")} className="p-2 border border-black hover:bg-gray-200 font-bold" title="Bold"><Bold size={16}/></button>
+                  <button onClick={() => insertTag('story', "<em>", "</em>")} className="p-2 border border-black hover:bg-gray-200 italic" title="Italic"><Italic size={16}/></button>
+                  <button onClick={() => insertTag('story', "<u>", "</u>")} className="p-2 border border-black hover:bg-gray-200 underline" title="Underline"><Underline size={16}/></button>
+                </div>
+                <div className="flex gap-1 border-r-2 border-black pr-2">
+                  <button onClick={() => insertTag('story', "<h2>", "</h2>")} className="p-2 border border-black hover:bg-gray-200 font-bold" title="Heading 2"><Heading2 size={16}/></button>
+                  <button onClick={() => insertTag('story', "<p>", "</p>")} className="px-3 py-2 border border-black hover:bg-gray-200 font-bold text-xs" title="Paragraph">P</button>
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => insertTag('story', "<ul>\n  <li>", "</li>\n</ul>")} className="p-2 border border-black hover:bg-gray-200" title="Bullet List"><List size={16}/></button>
+                  <button onClick={() => insertTag('story', "<ol>\n  <li>", "</li>\n</ol>")} className="p-2 border border-black hover:bg-gray-200" title="Numbered List"><ListOrdered size={16}/></button>
+                </div>
+              </div>
+            )}
+
+            {previewStory || !isEditable ? (
+              <div className="w-full p-6 bg-gray-50 min-h-[300px] overflow-auto">
+                <div className="font-sans leading-relaxed text-sm [&>h2]:text-xl [&>h2]:font-bold [&>h2]:uppercase [&>h2]:mt-6 [&>h2]:mb-3 [&>h2]:border-b [&>h2]:border-black [&>p]:mb-4 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:mb-4 [&>ol]:list-decimal [&>ol]:pl-5 [&>ol]:mb-4" 
+                     dangerouslySetInnerHTML={{ __html: newProduct.story || "<p class='text-gray-400 font-mono text-xs italic uppercase'>No story content yet...</p>" }} />
+              </div>
+            ) : (
+              <textarea 
+                ref={storyRef}
+                value={newProduct.story} 
+                onChange={(e) => setNewProduct({ ...newProduct, story: e.target.value })} 
+                placeholder="<h2>Start your product story here...</h2>&#10;<p>Describe the origin, roast profile, and tasting notes...</p>"
+                className="w-full p-6 border-none text-sm font-mono leading-relaxed min-h-[300px] outline-none focus:bg-yellow-50 transition-colors bg-white resize-y" 
+              />
+            )}
+          </div>
+
           {/* SEO METADATA SECTION */}
-          <div className="mt-8 border-t-2 border-black pt-6">
+          <div className="border-t-2 border-black pt-6">
             <div className="flex items-center gap-2 mb-4">
               <Globe size={18} />
               <h3 className="text-sm font-black uppercase">Search Engine Optimization (SEO Metadata)</h3>
@@ -638,29 +758,9 @@ export function ProductCatalog() {
             <h3 className="text-sm font-black uppercase mb-4">Additional Images (Gallery)</h3>
             <div className="border border-black p-4 bg-gray-50">
               {isEditable && (
-                <div className="mb-4">
-                  <label className="block border-2 border-dashed border-black p-6 text-center hover:bg-gray-50 cursor-pointer transition-colors">
-                    <ImageIcon size={32} className="mx-auto mb-2 text-gray-400" />
-                    <p className="text-xs font-bold uppercase mb-1">Upload Gallery Image</p>
-                    <p className="text-[10px] text-gray-500">Click to browse or drag & drop</p>
-                    <input 
-                      type="file" 
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            if (reader.result) {
-                              setNewProduct({ ...newProduct, imageUrls: [...newProduct.imageUrls, reader.result as string] });
-                            }
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                      className="hidden" 
-                    />
-                  </label>
+                <div className="flex gap-2 mb-4">
+                  <input type="text" value={tempImageUrl} onChange={(e) => setTempImageUrl(e.target.value)} className="flex-1 px-3 py-2 border border-black text-sm font-mono" placeholder="Paste image URL here..." />
+                  <button type="button" onClick={handleAddGalleryImage} className="px-4 py-2 border border-black bg-black text-white hover:bg-gray-800 text-sm font-bold uppercase whitespace-nowrap">Add Image</button>
                 </div>
               )}
               {newProduct.imageUrls.length > 0 ? (

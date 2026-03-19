@@ -39,7 +39,6 @@ export function StockLedger() {
     batchId: "",
     adjType: "Decrease", // "Increase" or "Decrease"
     qty: "",
-    uom: "Kg",
     reason: ""
   });
 
@@ -72,39 +71,74 @@ export function StockLedger() {
     {
       id: "TXN-1003",
       timestamp: "2026-03-05 10:45:00",
-      itemName: "Arabica Medium Roast (Hạt)",
+      itemName: "SIG-250-W - Signature Blend 250g",
       batchId: "BAT-20260305-01",
       category: "Finished Product",
       action: "Prod. Yield",
-      qtyChange: 42.5,
-      uom: "Kg",
+      qtyChange: 170, // 42.5kg / 250g
+      uom: "Units",
       performedBy: "ROAST-02",
       referenceId: "PRD-2026-102",
     },
     {
       id: "TXN-1004",
       timestamp: "2026-03-05 13:00:00",
-      itemName: "Arabica Medium Roast (Hạt)",
+      itemName: "SIG-250-W - Signature Blend 250g",
       batchId: "BAT-20260305-01",
       category: "Finished Product",
       action: "Sales Dispatch",
       qtyChange: -10,
-      uom: "Kg",
+      uom: "Units",
       performedBy: "SALE-01",
       referenceId: "ORD-20260305-015",
     },
   ]);
 
-  // Mock data cho dropdown lúc Adjust
+  // --- MOCK DATA FOR SELECTION WITH STOCK INFO ---
   const mockRawMaterials = [
-    { id: "MAT-001", name: "Arabica Green Beans", currentBatches: ["MAT-20260305-01", "MAT-20260210-03"] },
-    { id: "MAT-002", name: "Robusta Green Beans", currentBatches: ["MAT-20260301-02"] }
+    { 
+      id: "MAT-001", name: "Arabica Green Beans", 
+      batches: [
+        { batchId: "MAT-20260305-01", currentStock: 450 },
+        { batchId: "MAT-20260210-03", currentStock: 120 }
+      ] 
+    },
+    { 
+      id: "MAT-002", name: "Robusta Green Beans", 
+      batches: [
+        { batchId: "MAT-20260301-02", currentStock: 300 }
+      ] 
+    }
   ];
   
   const mockFinishedProducts = [
-    { id: "PROD-001", name: "Arabica Medium Roast (Hạt)", currentBatches: ["BAT-20260305-01", "BAT-20260228-01"] },
-    { id: "PROD-002", name: "Signature Blend 500g", currentBatches: ["BAT-20260310-05"] }
+    { 
+      id: "SIG-250-W", name: "Signature Blend 250g (Whole Bean)", 
+      batches: [
+        { batchId: "BAT-20260305-01", currentStock: 160 },
+        { batchId: "BAT-20260228-01", currentStock: 45 }
+      ] 
+    },
+    { 
+      id: "ACD-500-GP", name: "Arabica Cầu Đất 500g (Ground Phin)", 
+      batches: [
+        { batchId: "BAT-20260310-05", currentStock: 80 }
+      ] 
+    }
   ];
+
+  // --- DERIVED STATES ---
+  const currentUom = adjForm.category === "Raw Material" ? "Kg" : "Units";
+  
+  const currentSelectedBatchInfo = () => {
+    if (!adjForm.itemName || !adjForm.batchId) return null;
+    const sourceList = adjForm.category === "Raw Material" ? mockRawMaterials : mockFinishedProducts;
+    const item = sourceList.find(i => i.id === adjForm.itemName);
+    if (!item) return null;
+    return item.batches.find(b => b.batchId === adjForm.batchId);
+  };
+
+  const selectedBatchData = currentSelectedBatchInfo();
 
   // --- FILTERING LOGIC ---
   const filteredData = ledgerData.filter((entry) => {
@@ -130,7 +164,6 @@ export function StockLedger() {
       batchId: "",
       adjType: "Decrease",
       qty: "",
-      uom: "Kg",
       reason: ""
     });
     setViewMode("MANUAL_ADJUSTMENT");
@@ -148,15 +181,23 @@ export function StockLedger() {
       return;
     }
 
+    if (adjForm.adjType === "Decrease" && selectedBatchData && qtyNum > selectedBatchData.currentStock) {
+      if (!window.confirm(`Warning: You are deducting ${qtyNum} ${currentUom}, which is MORE than the current stock of ${selectedBatchData.currentStock} ${currentUom}. The batch status will become 'Empty' or negative. Proceed?`)) {
+        return;
+      }
+    }
+
     const finalQtyChange = adjForm.adjType === "Decrease" ? -qtyNum : qtyNum;
     const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
     
-    // Tìm tên item đầy đủ dựa trên ID đã chọn (để log cho đẹp)
+    // Tên hiển thị đầy đủ
     let fullItemName = adjForm.itemName;
     if (adjForm.category === "Raw Material") {
-      fullItemName = mockRawMaterials.find(m => m.id === adjForm.itemName)?.name || adjForm.itemName;
+      const found = mockRawMaterials.find(m => m.id === adjForm.itemName);
+      if(found) fullItemName = `${found.id} - ${found.name}`;
     } else {
-      fullItemName = mockFinishedProducts.find(p => p.id === adjForm.itemName)?.name || adjForm.itemName;
+      const found = mockFinishedProducts.find(p => p.id === adjForm.itemName);
+      if(found) fullItemName = `${found.id} - ${found.name}`;
     }
 
     const newLogEntry: LedgerEntry = {
@@ -167,16 +208,14 @@ export function StockLedger() {
       category: adjForm.category,
       action: "Manual Adj",
       qtyChange: finalQtyChange,
-      uom: adjForm.uom,
+      uom: currentUom,
       performedBy: "ADMIN-01",
       referenceId: `ADJ-${timestamp.replace(/[- :]/g, "").slice(0,14)}`,
     };
 
-    // 1. Cập nhật Log
     setLedgerData([newLogEntry, ...ledgerData]);
     
-    // 2. Alert mô phỏng gọi API update bảng Quantity tương ứng
-    alert(`SYSTEM: Successfully executed ${adjForm.adjType} of ${qtyNum} ${adjForm.uom} for ${fullItemName} (Batch: ${adjForm.batchId}).\nInventory database updated.\nReason: ${adjForm.reason}`);
+    alert(`SYSTEM: Successfully executed ${adjForm.adjType} of ${qtyNum} ${currentUom} for ${fullItemName} (Batch: ${adjForm.batchId}).\nInventory database updated.\nReason: ${adjForm.reason}`);
     
     setViewMode("LIST");
   };
@@ -439,7 +478,7 @@ export function StockLedger() {
                   onChange={(e) => setAdjForm({...adjForm, itemName: e.target.value, batchId: ""})}
                   className="w-full p-3 border border-black text-sm font-bold outline-none bg-white"
                 >
-                  <option value="">-- Choose Item --</option>
+                  <option value="">-- Choose Item / Variant --</option>
                   {(adjForm.category === "Raw Material" ? mockRawMaterials : mockFinishedProducts).map(item => (
                     <option key={item.id} value={item.id}>{item.id} - {item.name}</option>
                   ))}
@@ -456,11 +495,19 @@ export function StockLedger() {
                 >
                   <option value="">-- Choose Batch --</option>
                   {adjForm.itemName && (adjForm.category === "Raw Material" ? mockRawMaterials : mockFinishedProducts)
-                    .find(i => i.id === adjForm.itemName)?.currentBatches.map(bId => (
-                      <option key={bId} value={bId}>{bId}</option>
+                    .find(i => i.id === adjForm.itemName)?.batches.map(b => (
+                      <option key={b.batchId} value={b.batchId}>{b.batchId}</option>
                     ))
                   }
                 </select>
+                
+                {/* Hiển thị Current Stock khi chọn Batch */}
+                {selectedBatchData && (
+                  <div className="mt-2 text-right">
+                    <span className="text-[10px] font-bold uppercase text-gray-500 mr-2">Current Stock:</span>
+                    <span className="font-mono font-black text-sm">{selectedBatchData.currentStock} {currentUom}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -481,7 +528,7 @@ export function StockLedger() {
                 <div className="flex-1">
                   <label className="block text-xs font-bold uppercase mb-1">Adjustment Quantity *</label>
                   <input 
-                    type="number" min="0" step="0.1"
+                    type="number" min="0" step={adjForm.category === "Raw Material" ? "0.1" : "1"}
                     value={adjForm.qty}
                     onChange={(e) => setAdjForm({...adjForm, qty: e.target.value})}
                     placeholder="Enter amount"
@@ -490,7 +537,7 @@ export function StockLedger() {
                 </div>
                 <div className="w-24">
                    <label className="block text-xs font-bold uppercase mb-1">UoM</label>
-                   <input type="text" value={adjForm.uom} readOnly className="w-full p-3 border border-black text-sm text-center bg-gray-100 cursor-not-allowed font-bold" />
+                   <input type="text" value={currentUom} readOnly className="w-full p-3 border border-black text-sm text-center bg-gray-100 cursor-not-allowed font-bold" />
                 </div>
               </div>
             </div>
@@ -501,7 +548,7 @@ export function StockLedger() {
               <textarea 
                 value={adjForm.reason}
                 onChange={(e) => setAdjForm({...adjForm, reason: e.target.value})}
-                placeholder="E.g., Discovered expired beans during inventory check..."
+                placeholder="E.g., Discovered expired items during inventory check, or entered wrong quantity on PO..."
                 className="w-full p-4 border border-black h-24 text-sm resize-none outline-none focus:ring-1 focus:ring-black"
               />
             </div>
