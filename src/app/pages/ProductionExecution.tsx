@@ -26,6 +26,7 @@ export function ProductionExecution() {
   const [variantSearch, setVariantSearch] = useState("");
   const [expandedProducts, setExpandedProducts] = useState<string[]>([]);
   const [selectedOutputs, setSelectedOutputs] = useState<Record<string, number>>({}); 
+  const [selectedProductFamily, setSelectedProductFamily] = useState<string | null>(null);
 
   // --- DỮ LIỆU MOCK ---
   const availableBatches = [
@@ -166,8 +167,28 @@ export function ProductionExecution() {
 
   const handleToggleOutputVariant = (sku: string, checked: boolean) => {
     const newOutputs = { ...selectedOutputs };
-    if (checked) newOutputs[sku] = 0;
-    else delete newOutputs[sku];
+    
+    if (checked) {
+      // Tìm product family của variant này
+      const family = productFamilies.find(f => 
+        f.variants.some(v => v.sku === sku)
+      );
+      
+      // Nếu chưa có product family nào được chọn, set product family này
+      if (!selectedProductFamily && family) {
+        setSelectedProductFamily(family.id);
+      }
+      
+      newOutputs[sku] = 0;
+    } else {
+      delete newOutputs[sku];
+      
+      // Nếu không còn variant nào được chọn, reset selectedProductFamily
+      if (Object.keys(newOutputs).length === 0) {
+        setSelectedProductFamily(null);
+      }
+    }
+    
     setSelectedOutputs(newOutputs);
   };
 
@@ -399,19 +420,47 @@ export function ProductionExecution() {
                             <div className="bg-white border-t border-black">
                               {family.variants.map((variant) => {
                                 const isSelected = selectedOutputs[variant.sku] !== undefined;
+                                const isDisabled = selectedProductFamily !== null && selectedProductFamily !== family.id;
+                                
                                 return (
-                                  <div key={variant.sku} className={`p-3 border-b border-gray-200 last:border-b-0 flex items-center gap-3 transition-colors ${isSelected ? 'bg-black text-white' : 'hover:bg-gray-50'}`}>
+                                  <div 
+                                    key={variant.sku} 
+                                    className={`p-3 border-b border-gray-200 last:border-b-0 flex items-center gap-3 transition-colors ${
+                                      isSelected 
+                                        ? 'bg-black text-white' 
+                                        : isDisabled 
+                                          ? 'bg-gray-200 opacity-50 cursor-not-allowed' 
+                                          : 'hover:bg-gray-50'
+                                    }`}
+                                  >
                                     <input 
                                       type="checkbox" 
                                       id={`output-${variant.sku}`}
-                                      className={`w-4 h-4 border-2 cursor-pointer ${isSelected ? 'accent-white' : 'border-black accent-black'}`}
+                                      className={`w-4 h-4 border-2 ${
+                                        isSelected 
+                                          ? 'accent-white cursor-pointer' 
+                                          : isDisabled 
+                                            ? 'cursor-not-allowed opacity-50' 
+                                            : 'border-black accent-black cursor-pointer'
+                                      }`}
                                       checked={isSelected}
+                                      disabled={isDisabled}
                                       onChange={(e) => handleToggleOutputVariant(variant.sku, e.target.checked)}
                                     />
-                                    <label htmlFor={`output-${variant.sku}`} className="flex-1 cursor-pointer">
+                                    <label 
+                                      htmlFor={`output-${variant.sku}`} 
+                                      className={`flex-1 ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                                    >
                                       <div className="font-mono text-sm font-bold">{variant.sku}</div>
-                                      <div className={`text-xs mt-0.5 ${isSelected ? 'text-gray-300' : 'text-gray-500'}`}>{variant.name}</div>
+                                      <div className={`text-xs mt-0.5 ${isSelected ? 'text-gray-300' : 'text-gray-500'}`}>
+                                        {variant.name}
+                                      </div>
                                     </label>
+                                    {isDisabled && (
+                                      <span className="text-[9px] font-bold uppercase tracking-wider text-gray-500 border border-gray-400 px-1.5 py-0.5">
+                                        Locked
+                                      </span>
+                                    )}
                                   </div>
                                 );
                               })}

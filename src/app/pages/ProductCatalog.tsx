@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { Pagination } from "../components/Pagination";
 
-// 1. CẬP NHẬT INTERFACES KHỚP VỚI DATABASE
+// 1. CẬT NHẬT INTERFACES KHỚP VỚI DATABASE
 interface SensoryData {
   bitter: number;  // 1-10
   sweet: number;   // 1-10
@@ -49,7 +49,7 @@ interface Variant {
   weight: string;
   form: string;
   salePrice: string;
-  status: "Active" | "Inactive" | "Locked";
+  status: "ACTIVE" | "INACTIVE" | "DELETED";
   batches: ProductBatch[];
 }
 
@@ -63,7 +63,7 @@ interface ParentProduct {
   metaDescription: string;
   thumbnailUrl?: string;
   imageUrls: string[];
-  status: "Active" | "Inactive" | "Locked";
+  status: "ACTIVE" | "INACTIVE" | "DELETED";
   variants: Variant[];
   sensoryData?: SensoryData;
 }
@@ -97,6 +97,13 @@ export function ProductCatalog() {
   // State tạm để nhập link ảnh vào mảng
   const [tempImageUrl, setTempImageUrl] = useState("");
 
+  // File input ref for gallery
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+
+  // State for delete confirmation modal
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [pendingDeleteStatus, setPendingDeleteStatus] = useState<"DELETED" | null>(null);
+
   // --- STATES SEARCH, FILTER & PAGINATION ---
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
@@ -120,14 +127,14 @@ export function ProductCatalog() {
         "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=200",
         "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=200"
       ],
-      status: "Active",
+      status: "ACTIVE",
       variants: [
         {
           sku: "SIG-250-W",
           weight: "250g",
           form: "Whole Bean",
           salePrice: "180000",
-          status: "Active",
+          status: "ACTIVE",
           batches: [
             { batchId: "PB-202601-01", quantity: 50, costPrice: "120000", manufacturingDate: "2026-01-10", expiryDate: "2026-07-10" },
             { batchId: "PB-202602-05", quantity: 150, costPrice: "118000", manufacturingDate: "2026-02-15", expiryDate: "2026-08-15" }
@@ -138,7 +145,7 @@ export function ProductCatalog() {
           weight: "250g",
           form: "Ground Phin",
           salePrice: "180000",
-          status: "Active",
+          status: "ACTIVE",
           batches: [
             { batchId: "PB-202601-02", quantity: 5, costPrice: "125000", manufacturingDate: "2026-01-12", expiryDate: "2026-07-12" }
           ]
@@ -148,7 +155,7 @@ export function ProductCatalog() {
           weight: "500g",
           form: "Whole Bean",
           salePrice: "340000",
-          status: "Active",
+          status: "ACTIVE",
           batches: []
         },
       ],
@@ -162,7 +169,7 @@ export function ProductCatalog() {
       category: "Single Origin",
       metaTitle: "Arabica Cầu Đất - Single Origin Coffee | Katak Coffee",
       metaDescription: "Premium single-origin Arabica coffee from Cầu Đất highlands",
-      status: "Locked",
+      status: "DELETED",
       imageUrls: [],
       variants: [
         {
@@ -170,7 +177,7 @@ export function ProductCatalog() {
           weight: "250g",
           form: "Whole Bean",
           salePrice: "220000",
-          status: "Active",
+          status: "ACTIVE",
           batches: [
             { batchId: "PB-202512-99", quantity: 20, costPrice: "160000", manufacturingDate: "2025-12-01", expiryDate: "2026-06-01" }
           ]
@@ -189,7 +196,13 @@ export function ProductCatalog() {
   };
 
   const handleToggleProductStatus = (productId: string) => {
-    setProducts(products.map(p => p.id === productId ? { ...p, status: p.status === "Locked" ? "Active" : "Locked" } : p));
+    setProducts(products.map(p => {
+      if (p.id === productId) {
+        // Toggle giữa ACTIVE và INACTIVE
+        return { ...p, status: p.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" };
+      }
+      return p;
+    }));
   };
 
   const getVariantStockInfo = (batches: ProductBatch[]) => {
@@ -202,11 +215,11 @@ export function ProductCatalog() {
 
   // --- FORM STATES & HANDLERS ---
   const [newProduct, setNewProduct] = useState<ParentProduct>({
-    id: "", name: "", summary: "", story: "", category: "", metaTitle: "", metaDescription: "", thumbnailUrl: "", imageUrls: [], status: "Active", variants: [],
+    id: "", name: "", summary: "", story: "", category: "", metaTitle: "", metaDescription: "", thumbnailUrl: "", imageUrls: [], status: "ACTIVE", variants: [],
   });
 
   const [newVariant, setNewVariant] = useState<Variant>({
-    sku: "", weight: "", form: "", salePrice: "", status: "Active", batches: [],
+    sku: "", weight: "", form: "", salePrice: "", status: "ACTIVE", batches: [],
   });
 
   const handleAddProduct = () => {
@@ -217,7 +230,7 @@ export function ProductCatalog() {
     setPreviewStory(false);
     setNewProduct({
       id: `PROD-${String(products.length + 1).padStart(3, "0")}`,
-      name: "", summary: "", story: "", category: "", metaTitle: "", metaDescription: "", thumbnailUrl: "", imageUrls: [], status: "Active", variants: [],
+      name: "", summary: "", story: "", category: "", metaTitle: "", metaDescription: "", thumbnailUrl: "", imageUrls: [], status: "ACTIVE", variants: [],
     });
     setViewMode("ADD_PRODUCT");
     setIsEditable(true);
@@ -297,7 +310,7 @@ export function ProductCatalog() {
   const handleAddVariant = (productId: string) => {
     setCurrentProductId(productId);
     setEditingVariant({ productId, variant: null });
-    setNewVariant({ sku: "", weight: "", form: "", salePrice: "", status: "Active", batches: [] });
+    setNewVariant({ sku: "", weight: "", form: "", salePrice: "", status: "ACTIVE", batches: [] });
     setShowVariantForm(true);
   };
 
@@ -322,10 +335,40 @@ export function ProductCatalog() {
     setShowVariantForm(false);
   };
 
+  // Handler cho status change với confirmation popup cho DELETED
+  const handleStatusChange = (newStatus: "ACTIVE" | "INACTIVE" | "DELETED") => {
+    if (newStatus === "DELETED") {
+      // Show confirmation popup
+      setPendingDeleteStatus("DELETED");
+      setShowDeleteConfirm(true);
+    } else {
+      // Trực tiếp set status cho ACTIVE hoặc INACTIVE
+      setNewProduct({ ...newProduct, status: newStatus });
+    }
+  };
+
+  const handleConfirmDelete = () => {
+    if (pendingDeleteStatus === "DELETED") {
+      setNewProduct({ ...newProduct, status: "DELETED" });
+    }
+    setShowDeleteConfirm(false);
+    setPendingDeleteStatus(null);
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setPendingDeleteStatus(null);
+  };
+
   // --- LỌC DỮ LIỆU & PHÂN TRANG ---
   useEffect(() => { setCurrentPage(1); }, [searchQuery, filterCategory, filterStatus, filterStockStatus]);
 
   const filteredProducts = products.filter((p) => {
+    // Ẩn products có status DELETED, trừ khi user filter xem DELETED
+    if (p.status === "DELETED" && filterStatus !== "DELETED") {
+      return false;
+    }
+    
     const matchSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchCat = filterCategory === "" || p.category === filterCategory;
     const matchStatus = filterStatus === "All" || p.status === filterStatus;
@@ -379,9 +422,9 @@ export function ProductCatalog() {
             </select>
             <select className="px-3 py-2 border border-black bg-white text-sm outline-none min-w-[150px] font-bold" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
               <option value="All">All Parent Status</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-              <option value="Locked">Locked</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+              <option value="DELETED">Deleted</option>
             </select>
             <select className="px-3 py-2 border border-black bg-white text-sm outline-none min-w-[150px] font-bold" value={filterStockStatus} onChange={(e) => setFilterStockStatus(e.target.value)}>
               <option value="All">All Stock Status</option>
@@ -397,11 +440,11 @@ export function ProductCatalog() {
             ) : (
               currentProducts.map((product, index) => {
                 const isExpanded = expandedProducts.includes(product.id);
-                const isLocked = product.status === "Locked";
+                const isInactive = product.status === "INACTIVE";
                 const stt = (currentPage - 1) * itemsPerPage + index + 1;
 
                 return (
-                  <div key={product.id} className={`border border-black transition-opacity ${isLocked ? "opacity-60 bg-gray-100" : "bg-white"}`}>
+                  <div key={product.id} className={`border border-black transition-opacity ${isInactive ? "opacity-60 bg-gray-100" : "bg-white"}`}>
                     <div onClick={() => toggleProduct(product.id)} className="p-4 border-b border-black flex items-center justify-between cursor-pointer hover:bg-gray-50">
                       <div className="flex items-center gap-4">
                         <button className="p-1 border border-black bg-white">
@@ -414,7 +457,11 @@ export function ProductCatalog() {
                         <div>
                           <div className="flex items-center gap-2">
                             <h3 className="font-bold">{product.name}</h3>
-                            <span className={`text-[10px] px-2 py-0.5 border font-bold uppercase ${isLocked ? "border-red-600 text-red-600" : "border-green-600 text-green-600"}`}>
+                            <span className={`text-[10px] px-2 py-0.5 border font-bold uppercase ${
+                              product.status === "ACTIVE" ? "border-green-600 text-green-600" :
+                              product.status === "INACTIVE" ? "border-gray-600 text-gray-600" :
+                              "border-red-600 text-red-600"
+                            }`}>
                               {product.status}
                             </span>
                           </div>
@@ -423,8 +470,8 @@ export function ProductCatalog() {
                       </div>
 
                       <div className="flex gap-2">
-                        <button onClick={(e) => { e.stopPropagation(); handleToggleProductStatus(product.id); }} className={`px-2 py-1 border border-black hover:bg-gray-100 flex items-center gap-2 ${isLocked ? "bg-red-50" : "bg-white"}`} title={isLocked ? "Unlock Product" : "Lock Product"}>
-                          {isLocked ? <Unlock size={14} /> : <Lock size={14} />}
+                        <button onClick={(e) => { e.stopPropagation(); handleToggleProductStatus(product.id); }} className={`px-2 py-1 border border-black hover:bg-gray-100 flex items-center gap-2 ${isInactive ? "bg-gray-200" : "bg-white"}`} title={product.status === "ACTIVE" ? "Lock Product" : "Unlock Product"}>
+                          {product.status === "ACTIVE" ? <Lock size={14} /> : <Unlock size={14} />}
                         </button>
                         <button onClick={(e) => { e.stopPropagation(); handleDetailProduct(product); }} className="px-3 py-1 border border-black bg-white hover:bg-gray-100 flex items-center gap-2 uppercase font-bold text-xs">
                           <Eye size={14} /> Detail
@@ -573,8 +620,8 @@ export function ProductCatalog() {
                 </div>
                 <div className="w-1/3">
                   <label className="block text-xs font-bold uppercase mb-1">Status</label>
-                  <select value={newProduct.status} onChange={(e) => setNewProduct({ ...newProduct, status: e.target.value as any })} disabled={!isEditable} className={`w-full px-3 py-2 border border-black text-sm ${!isEditable ? 'bg-gray-100 opacity-80 cursor-not-allowed' : 'bg-white'}`}>
-                    <option value="Active">Active</option><option value="Inactive">Inactive</option><option value="Locked">Locked</option>
+                  <select value={newProduct.status} onChange={(e) => handleStatusChange(e.target.value as any)} disabled={!isEditable} className={`w-full px-3 py-2 border border-black text-sm ${!isEditable ? 'bg-gray-100 opacity-80 cursor-not-allowed' : 'bg-white'}`}>
+                    <option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option><option value="DELETED">Deleted</option>
                   </select>
                 </div>
               </div>
@@ -758,10 +805,35 @@ export function ProductCatalog() {
             <h3 className="text-sm font-black uppercase mb-4">Additional Images (Gallery)</h3>
             <div className="border border-black p-4 bg-gray-50">
               {isEditable && (
-                <div className="flex gap-2 mb-4">
-                  <input type="text" value={tempImageUrl} onChange={(e) => setTempImageUrl(e.target.value)} className="flex-1 px-3 py-2 border border-black text-sm font-mono" placeholder="Paste image URL here..." />
-                  <button type="button" onClick={handleAddGalleryImage} className="px-4 py-2 border border-black bg-black text-white hover:bg-gray-800 text-sm font-bold uppercase whitespace-nowrap">Add Image</button>
-                </div>
+                <label className="block border-2 border-dashed border-black p-6 text-center hover:bg-gray-100 cursor-pointer transition-colors mb-4">
+                  <ImageIcon size={32} className="mx-auto mb-2 text-gray-400" />
+                  <p className="text-sm font-bold uppercase mb-1">Upload Gallery Images</p>
+                  <p className="text-[10px] text-gray-500">Click to select multiple images or drag & drop</p>
+                  <input 
+                    ref={galleryInputRef}
+                    type="file" 
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => {
+                      const files = e.target.files;
+                      if (files && files.length > 0) {
+                        Array.from(files).forEach(file => {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            setNewProduct(prev => ({ 
+                              ...prev, 
+                              imageUrls: [...prev.imageUrls, reader.result as string] 
+                            }));
+                          };
+                          reader.readAsDataURL(file);
+                        });
+                      }
+                      // Reset input để cho phép upload lại cùng file
+                      if (e.target) e.target.value = '';
+                    }}
+                    className="hidden" 
+                  />
+                </label>
               )}
               {newProduct.imageUrls.length > 0 ? (
                 <div className="flex gap-3 overflow-x-auto pb-2">
@@ -889,7 +961,7 @@ export function ProductCatalog() {
                 <div className="w-1/3">
                   <label className="block text-xs font-bold uppercase mb-1">Status</label>
                   <select value={newVariant.status} onChange={(e) => setNewVariant({ ...newVariant, status: e.target.value as any })} className="w-full px-3 py-2 border border-black bg-white text-sm">
-                    <option value="Active">Active</option><option value="Inactive">Inactive</option>
+                    <option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option>
                   </select>
                 </div>
               </div>
@@ -920,6 +992,53 @@ export function ProductCatalog() {
         </div>
       )}
 
+      {/* =========================================
+         MODAL: DELETE CONFIRMATION
+      ========================================= */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border-4 border-black p-8 max-w-md w-full shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 border-2 border-red-600 bg-red-50 flex items-center justify-center">
+                <AlertTriangle size={28} className="text-red-600" strokeWidth={2.5} />
+              </div>
+              <h2 className="font-black text-xl uppercase tracking-tighter">Confirm Delete</h2>
+            </div>
+            
+            <div className="space-y-4 mb-8">
+              <p className="text-sm font-bold leading-relaxed">
+                Bạn có chắc chắn muốn <span className="text-red-600 uppercase">XÓA</span> sản phẩm này không?
+              </p>
+              <div className="border border-black bg-gray-50 p-4">
+                <p className="text-xs font-bold uppercase mb-2 text-gray-600">Product Info:</p>
+                <p className="font-mono text-sm font-bold">{newProduct.id}</p>
+                <p className="text-sm font-bold mt-1">{newProduct.name}</p>
+              </div>
+              <div className="border-l-4 border-red-600 bg-red-50 p-3">
+                <p className="text-xs font-bold uppercase text-red-600">
+                  ⚠ Sản phẩm sẽ được đánh dấu DELETED và ẩn khỏi danh sách mặc định.
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex gap-3 justify-end">
+              <button 
+                onClick={handleCancelDelete} 
+                className="px-6 py-3 border-2 border-black bg-white hover:bg-gray-100 font-bold uppercase text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleConfirmDelete} 
+                className="px-6 py-3 border-2 border-red-600 bg-red-600 text-white hover:bg-red-700 font-bold uppercase text-sm transition-colors flex items-center gap-2"
+              >
+                <AlertTriangle size={16} />
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
