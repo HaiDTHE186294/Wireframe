@@ -1,11 +1,11 @@
 import { useState, useMemo } from "react";
-import { AlertTriangle, Blend, Beaker, Search, ChevronDown, ChevronRight } from "lucide-react";
+import { AlertTriangle, Blend, Beaker, Search, ChevronDown, ChevronRight, Package } from "lucide-react";
 
 // --- INTERFACES ---
 interface Variant {
   sku: string;
   name: string;
-  weightInKg: number; // Trọng lượng 1 sản phẩm để tính toán giá vốn
+  weightInKg: number; 
 }
 
 interface ProductFamily {
@@ -15,17 +15,17 @@ interface ProductFamily {
 }
 
 export function ProductionExecution() {
-  // --- STATE QUẢN LÝ NGUYÊN LIỆU ĐẦU VÀO ---
-  const [selectedInputs, setSelectedInputs] = useState<Record<string, number>>({});
+  // --- STATE QUẢN LÝ NGUYÊN LIỆU ĐẦU VÀO (Bao gồm Used & Loss cho từng Batch) ---
+  const [selectedInputs, setSelectedInputs] = useState<Record<string, { used: number, loss: number }>>({});
   const [materialSearch, setMaterialSearch] = useState("");
   
+  // --- STATE QUẢN LÝ SẢN XUẤT ---
+  const [manufacturingDate, setManufacturingDate] = useState(new Date().toISOString().split('T')[0]);
+
   // --- STATE QUẢN LÝ THÀNH PHẨM ĐẦU RA ---
   const [variantSearch, setVariantSearch] = useState("");
-  const [expandedProducts, setExpandedProducts] = useState<string[]>([]); // Quản lý đóng/mở Product
-  const [selectedOutputs, setSelectedOutputs] = useState<Record<string, number>>({}); // { sku: qty }
-
-  const [manufacturingDate, setManufacturingDate] = useState(new Date().toISOString().split('T')[0]);
-  const [lossQty, setLossQty] = useState("");
+  const [expandedProducts, setExpandedProducts] = useState<string[]>([]);
+  const [selectedOutputs, setSelectedOutputs] = useState<Record<string, number>>({}); 
 
   // --- DỮ LIỆU MOCK ---
   const availableBatches = [
@@ -35,7 +35,6 @@ export function ProductionExecution() {
     { id: "MAT-20260225-002", name: "Peaberry Blend", stock: 150, unitCost: 280000 },
   ];
 
-  // Data Output cấu trúc lại theo Product -> Variants
   const productFamilies: ProductFamily[] = [
     {
       id: "PROD-SIG",
@@ -63,47 +62,48 @@ export function ProductionExecution() {
   );
 
   const filteredFamilies = productFamilies.map(family => {
-    // Nếu tìm kiếm khớp Product Name thì trả về full variants
     if (family.name.toLowerCase().includes(variantSearch.toLowerCase())) {
       return family;
     }
-    // Nếu không, lọc các variants khớp với từ khóa
     const matchingVariants = family.variants.filter(v => 
       v.sku.toLowerCase().includes(variantSearch.toLowerCase()) ||
       v.name.toLowerCase().includes(variantSearch.toLowerCase())
     );
     return { ...family, variants: matchingVariants };
-  }).filter(family => family.variants.length > 0); // Chỉ giữ lại Product có variant khớp
+  }).filter(family => family.variants.length > 0);
 
   // --- LOGIC TÍNH TOÁN ĐỘNG ---
   const calculations = useMemo(() => {
-    // 1. Tính toán Đầu vào
+    // 1. Tính toán Đầu vào & Hao hụt
     let totalInputKg = 0;
+    let totalLossKg = 0;
     let totalInputValue = 0;
 
-    Object.entries(selectedInputs).forEach(([id, qty]) => {
-      if (qty > 0) {
+    Object.entries(selectedInputs).forEach(([id, data]) => {
+      if (data.used > 0) {
         const batch = availableBatches.find(b => b.id === id);
         if (batch) {
-          totalInputKg += qty;
-          totalInputValue += qty * batch.unitCost;
+          totalInputKg += data.used;
+          totalLossKg += data.loss;
+          totalInputValue += data.used * batch.unitCost;
         }
       }
     });
 
-    const isBlending = Object.keys(selectedInputs).filter(k => selectedInputs[k] > 0).length > 1;
+    // Fix lỗi Javascript Floating Point (ví dụ: 0.30000000000004)
+    totalInputKg = Number(totalInputKg.toFixed(2));
+    totalLossKg = Number(totalLossKg.toFixed(2));
+
+    const isBlending = Object.keys(selectedInputs).filter(k => selectedInputs[k].used > 0).length > 1;
     const avgUnitCost = totalInputKg > 0 ? totalInputValue / totalInputKg : 0;
     
-    // 2. Tính toán Hao hụt
-    const loss = parseFloat(lossQty) || 0;
-    const lossPercentage = totalInputKg > 0 ? (loss / totalInputKg) * 100 : 0;
-    const isLossWarning = lossPercentage > 20;
+    // Net yield sau rang
+    const totalRoastedKg = Number(Math.max(0, totalInputKg - totalLossKg).toFixed(2));
 
-    // 3. Tính toán Đầu ra & Giá vốn (COGS)
+    // 2. Tính toán Đầu ra & Giá vốn (COGS)
     let totalOutputKg = 0;
     let totalOutputUnits = 0;
     
-    // Tạo map mapping SKU -> Weight để tính tổng Kg thành phẩm
     const skuWeightMap: Record<string, number> = {};
     productFamilies.forEach(f => f.variants.forEach(v => { skuWeightMap[v.sku] = v.weightInKg; }));
 
@@ -114,28 +114,47 @@ export function ProductionExecution() {
       }
     });
 
-    // Giá vốn bình quân trên 1 Kg Thành Phẩm (đã cộng hao hụt)
-    const costPerFinishedKg = totalOutputKg > 0 ? totalInputValue / totalOutputKg : 0;
+    totalOutputKg = Number(totalOutputKg.toFixed(2));
+
+    // 3. Hàng rời còn dư (Sẽ lưu ở Product Batch)
+    const leftoverBulkKg = Number(Math.max(0, totalRoastedKg - totalOutputKg).toFixed(2));
+    const isOverPackaged = totalOutputKg > totalRoastedKg; // Cảnh báo đóng gói lố số hạt rang được
+
+    // 4. Giá vốn bình quân trên 1 Kg Thành Phẩm (đã bao gồm hao hụt rang)
+    const costPerRoastedKg = totalRoastedKg > 0 ? totalInputValue / totalRoastedKg : 0;
 
     return { 
-      totalInputKg, totalInputValue, avgUnitCost, isBlending, 
-      lossPercentage, isLossWarning, 
-      totalOutputUnits, totalOutputKg, costPerFinishedKg 
+      totalInputKg, totalLossKg, totalRoastedKg, totalInputValue, avgUnitCost, isBlending, 
+      totalOutputUnits, totalOutputKg, leftoverBulkKg, isOverPackaged, costPerRoastedKg 
     };
-  }, [selectedInputs, selectedOutputs, lossQty]);
+  }, [selectedInputs, selectedOutputs]);
 
   // --- HANDLERS: INPUT ---
   const handleToggleBatch = (batchId: string, checked: boolean) => {
     const newInputs = { ...selectedInputs };
-    if (checked) newInputs[batchId] = 0; 
-    else delete newInputs[batchId]; 
+    if (checked) {
+      newInputs[batchId] = { used: 0, loss: 0 }; 
+    } else {
+      delete newInputs[batchId]; 
+    }
     setSelectedInputs(newInputs);
   };
 
-  const handleInputQtyChange = (batchId: string, qty: string, maxStock: number) => {
+  const handleInputChange = (batchId: string, field: 'used' | 'loss', qty: string, maxStock?: number) => {
     const val = parseFloat(qty);
-    const safeVal = isNaN(val) ? 0 : Math.min(val, maxStock); 
-    setSelectedInputs({ ...selectedInputs, [batchId]: safeVal });
+    const safeVal = isNaN(val) || val < 0 ? 0 : val;
+    
+    setSelectedInputs(prev => {
+      const currentData = prev[batchId] || { used: 0, loss: 0 };
+      const updatedData = { ...currentData, [field]: safeVal };
+      
+      // Capping mức sử dụng tối đa bằng số tồn kho
+      if (field === 'used' && maxStock !== undefined) {
+        updatedData.used = Math.min(updatedData.used, maxStock);
+      }
+      
+      return { ...prev, [batchId]: updatedData };
+    });
   };
 
   // --- HANDLERS: OUTPUT ---
@@ -158,7 +177,6 @@ export function ProductionExecution() {
     setSelectedOutputs({ ...selectedOutputs, [sku]: safeVal });
   };
 
-  // Tìm weight của 1 SKU để render UI
   const getVariantWeight = (sku: string) => {
     for (const f of productFamilies) {
       const v = f.variants.find(va => va.sku === sku);
@@ -176,12 +194,12 @@ export function ProductionExecution() {
           <p className="text-sm font-bold mt-1 uppercase tracking-widest text-gray-600">Create Product Batch</p>
         </div>
         <div className="flex gap-2">
-          <button className="px-6 py-2 border border-black bg-white hover:bg-gray-100 font-bold text-sm uppercase">
+          <button className="px-6 py-2 border border-black bg-white hover:bg-gray-100 font-bold text-sm uppercase transition-colors">
             Cancel
           </button>
           <button 
-            disabled={calculations.totalInputKg === 0 || calculations.totalOutputUnits === 0}
-            className="px-6 py-2 border border-black bg-black text-white hover:bg-gray-800 font-bold text-sm uppercase disabled:opacity-30 disabled:cursor-not-allowed"
+            disabled={calculations.totalInputKg === 0 || calculations.totalRoastedKg === 0 || calculations.isOverPackaged}
+            className="px-6 py-2 border border-black bg-black text-white hover:invert font-bold text-sm uppercase disabled:opacity-30 disabled:hover:invert-0 transition-all"
           >
             Complete Production
           </button>
@@ -203,7 +221,7 @@ export function ProductionExecution() {
               )}
             </div>
 
-            {/* Search Bar cho Nguyên liệu */}
+            {/* Search Bar */}
             <div className="p-3 border-b border-black bg-white">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-black" size={14} />
@@ -218,16 +236,19 @@ export function ProductionExecution() {
             </div>
             
             {/* List Nguyên liệu */}
-            <div className="h-[280px] overflow-y-auto bg-white">
+            <div className="h-[320px] overflow-y-auto bg-white border-b border-black">
               {filteredBatches.length === 0 ? (
-                <div className="p-4 text-center text-sm italic border-b border-black">No materials found.</div>
+                <div className="p-4 text-center text-sm italic">No materials found.</div>
               ) : (
                 filteredBatches.map((batch, index) => {
                   const isSelected = selectedInputs[batch.id] !== undefined;
+                  const inputData = selectedInputs[batch.id];
+
                   return (
-                    <div key={batch.id} className={`border-b border-black p-3 transition-colors ${isSelected ? 'bg-gray-100' : 'bg-white hover:bg-gray-50'}`}>
+                    <div key={batch.id} className={`border-b border-gray-200 p-3 transition-colors ${isSelected ? 'bg-gray-100' : 'bg-white hover:bg-gray-50'}`}>
                       <div className="flex items-start gap-3">
                         <span className="font-mono text-sm font-bold pt-0.5 w-4">{index + 1}.</span>
+                        
                         <input 
                           type="checkbox" 
                           id={`batch-${batch.id}`}
@@ -245,24 +266,36 @@ export function ProductionExecution() {
                           <div className="flex justify-between items-end">
                             <div>
                               <p className="text-xs font-mono">{batch.id}</p>
-                              <p className="text-xs font-mono">{batch.unitCost.toLocaleString()} ₫/kg</p>
+                              <p className="text-xs font-mono mt-1 text-gray-500">{batch.unitCost.toLocaleString()} ₫/kg</p>
                             </div>
-                            
-                            {/* Khung nhập khối lượng */}
-                            {isSelected && (
-                              <div className="flex items-center gap-2 mt-2">
-                                <label className="text-xs font-bold uppercase">Use (Kg):</label>
+                          </div>
+
+                          {/* Khung nhập khối lượng xuất hiện khi được tick */}
+                          {isSelected && (
+                            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-300">
+                              <div className="flex-1">
+                                <label className="block text-[10px] font-bold uppercase mb-1">Raw Used (Kg):</label>
                                 <input 
-                                  type="number" 
-                                  value={selectedInputs[batch.id] || ""}
-                                  onChange={(e) => handleInputQtyChange(batch.id, e.target.value, batch.stock)}
-                                  className="w-20 px-2 py-1 border border-black text-right text-sm font-bold font-mono focus:outline-none focus:bg-white bg-gray-50"
+                                  type="number" min="0" step="0.1"
+                                  value={inputData?.used || ""}
+                                  onChange={(e) => handleInputChange(batch.id, 'used', e.target.value, batch.stock)}
+                                  className="w-full px-2 py-1.5 border border-black text-right text-sm font-bold font-mono focus:outline-none focus:bg-white bg-gray-50"
                                   placeholder="0"
                                   autoFocus
                                 />
                               </div>
-                            )}
-                          </div>
+                              <div className="flex-1">
+                                <label className="block text-[10px] font-bold uppercase mb-1 text-red-600">Loss (Kg):</label>
+                                <input 
+                                  type="number" min="0" step="0.1"
+                                  value={inputData?.loss || ""}
+                                  onChange={(e) => handleInputChange(batch.id, 'loss', e.target.value)}
+                                  className="w-full px-2 py-1.5 border border-red-400 text-right text-sm font-bold font-mono focus:outline-none focus:bg-red-50 bg-gray-50 text-red-600"
+                                  placeholder="0"
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -272,17 +305,33 @@ export function ProductionExecution() {
             </div>
 
             {/* Input Summary Footer */}
-            <div className="p-4 bg-white border-t-2 border-black">
-              <h3 className="text-xs font-bold uppercase mb-2">Input Summary</h3>
-              <div className="flex justify-between items-end">
+            <div className="p-5 bg-white">
+              <h3 className="text-xs font-bold uppercase mb-3 border-b border-black pb-1">Input & Yield Summary</h3>
+              <div className="grid grid-cols-3 gap-4 text-center mb-4">
                 <div>
-                  <p className="text-2xl font-black font-mono">{calculations.totalInputKg} <span className="text-xs font-bold uppercase tracking-widest">Kg Total</span></p>
-                  {calculations.isBlending && <p className="text-xs font-mono mt-1 flex items-center gap-1"><Beaker size={12}/> AVG COST: {calculations.avgUnitCost.toLocaleString(undefined, {maximumFractionDigits:0})} ₫/KG</p>}
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Raw Input</p>
+                  <p className="text-lg font-black font-mono">{calculations.totalInputKg} <span className="text-[10px]">Kg</span></p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold uppercase tracking-widest">Total Value</p>
-                  <p className="text-lg font-bold font-mono">{calculations.totalInputValue.toLocaleString()} ₫</p>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-red-600 mb-1">Total Loss</p>
+                  <p className="text-lg font-black font-mono text-red-600">{calculations.totalLossKg} <span className="text-[10px]">Kg</span></p>
                 </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-green-700 mb-1">Net Roasted</p>
+                  <p className="text-lg font-black font-mono text-green-700">{calculations.totalRoastedKg} <span className="text-[10px]">Kg</span></p>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-end border-t border-dashed border-gray-300 pt-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">Material Value</p>
+                  <p className="text-sm font-bold font-mono">{calculations.totalInputValue.toLocaleString()} ₫</p>
+                </div>
+                {calculations.isBlending && (
+                  <div className="text-right text-xs font-mono flex items-center gap-1 text-gray-600">
+                    <Beaker size={12}/> AVG: {calculations.avgUnitCost.toLocaleString(undefined, {maximumFractionDigits:0})} ₫/KG
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -296,7 +345,7 @@ export function ProductionExecution() {
                 type="date" 
                 value={manufacturingDate}
                 onChange={(e) => setManufacturingDate(e.target.value)}
-                className="w-full px-3 py-2 border border-black text-sm font-mono font-bold" 
+                className="w-full px-3 py-2 border border-black text-sm font-mono font-bold outline-none focus:border-dashed" 
               />
             </div>
           </div>
@@ -305,15 +354,15 @@ export function ProductionExecution() {
         {/* ================= RIGHT COLUMN: OUTPUT ================= */}
         <div className="space-y-6">
           
-          {/* Step 3: Output & Yield */}
-          <div className="border border-black bg-white">
-            <div className="border-b border-black p-3 bg-gray-50">
-              <h2 className="font-bold uppercase text-sm tracking-wider">Step 3: Target Output & Yield</h2>
+          {/* Step 3: Packaging */}
+          <div className="border border-black bg-white flex flex-col h-full">
+            <div className="border-b border-black p-3 bg-gray-50 flex items-center gap-2">
+              <Package size={16}/>
+              <h2 className="font-bold uppercase text-sm tracking-wider">Step 3: Packaging (Variants)</h2>
             </div>
 
-            <div className="p-4 space-y-5">
-              {/* Vùng chọn Output Variants (Multiselect) */}
-              <div className="border border-black p-3">
+            <div className="p-4 flex-1 flex flex-col">
+              <div className="border border-black p-3 mb-4">
                 <label className="block text-xs font-bold uppercase mb-2">Target Product Variants</label>
                 <div className="relative mb-3">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-black" size={14} />
@@ -324,10 +373,7 @@ export function ProductionExecution() {
                     value={variantSearch}
                     onChange={(e) => {
                       setVariantSearch(e.target.value);
-                      // Auto expand all when searching
-                      if (e.target.value) {
-                        setExpandedProducts(productFamilies.map(f => f.id));
-                      }
+                      if (e.target.value) setExpandedProducts(productFamilies.map(f => f.id));
                     }}
                   />
                 </div>
@@ -335,13 +381,12 @@ export function ProductionExecution() {
                 {/* Variant Accordion List */}
                 <div className="max-h-[240px] overflow-y-auto border border-black bg-white">
                   {filteredFamilies.length === 0 ? (
-                     <div className="p-3 text-center text-sm italic">No variants found.</div>
+                     <div className="p-3 text-center text-sm italic text-gray-500">No variants found.</div>
                   ) : (
                     filteredFamilies.map((family) => {
                       const isExpanded = expandedProducts.includes(family.id);
                       return (
                         <div key={family.id} className="border-b border-black last:border-b-0">
-                          {/* Parent Row */}
                           <div 
                             onClick={() => toggleProductExpand(family.id)}
                             className="p-3 bg-gray-100 flex items-center justify-between cursor-pointer hover:bg-gray-200 transition-colors"
@@ -350,13 +395,12 @@ export function ProductionExecution() {
                             {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                           </div>
                           
-                          {/* Children Rows (Variants) */}
                           {isExpanded && (
                             <div className="bg-white border-t border-black">
                               {family.variants.map((variant) => {
                                 const isSelected = selectedOutputs[variant.sku] !== undefined;
                                 return (
-                                  <div key={variant.sku} className={`p-3 border-b border-gray-200 last:border-b-0 transition-colors flex items-center gap-3 ${isSelected ? 'bg-black text-white' : 'hover:bg-gray-50'}`}>
+                                  <div key={variant.sku} className={`p-3 border-b border-gray-200 last:border-b-0 flex items-center gap-3 transition-colors ${isSelected ? 'bg-black text-white' : 'hover:bg-gray-50'}`}>
                                     <input 
                                       type="checkbox" 
                                       id={`output-${variant.sku}`}
@@ -380,54 +424,43 @@ export function ProductionExecution() {
                 </div>
               </div>
 
-              {/* Khung nhập số lượng cho từng Output đã chọn */}
-              {Object.keys(selectedOutputs).length > 0 && (
-                <div className="border border-black p-3 bg-gray-50 space-y-3">
-                  <h3 className="text-xs font-bold uppercase border-b border-black pb-2 mb-2">Produced Quantities</h3>
+              {/* Nhập số lượng cho các Variant đã chọn */}
+              {Object.keys(selectedOutputs).length > 0 ? (
+                <div className="border border-black p-3 bg-gray-50 space-y-2 flex-1">
+                  <h3 className="text-xs font-bold uppercase border-b border-black pb-2 mb-2">Packaged Quantities</h3>
                   {Object.keys(selectedOutputs).map(sku => (
-                    <div key={sku} className="flex items-center justify-between bg-white border border-black p-2">
-                      <div className="flex-1">
+                    <div key={sku} className="flex items-center justify-between bg-white border border-gray-300 p-2">
+                      <div>
                         <p className="font-mono font-bold text-sm">{sku}</p>
-                        <p className="text-[10px] text-gray-500">Weight: {getVariantWeight(sku)} kg/unit</p>
+                        <p className="text-[10px] text-gray-500 uppercase">{getVariantWeight(sku)} Kg / Unit</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <input 
                           type="number" min="0" step="1"
                           value={selectedOutputs[sku] || ""}
                           onChange={(e) => handleOutputQtyChange(sku, e.target.value)}
-                          className="w-24 px-2 py-1 border border-black text-right text-sm font-bold font-mono focus:outline-none focus:ring-1 focus:ring-black"
+                          className="w-20 px-2 py-1 border border-black text-right text-sm font-bold font-mono outline-none focus:border-dashed"
                           placeholder="0"
                         />
                         <span className="text-xs font-bold uppercase w-10">Units</span>
                       </div>
                     </div>
                   ))}
+                  
+                  {calculations.isOverPackaged && (
+                     <div className="text-[10px] font-bold text-red-600 uppercase flex items-center gap-1 mt-3 p-2 bg-red-50 border border-red-200">
+                        <AlertTriangle size={12}/> Packaged weight exceeds Net Roasted Yield!
+                     </div>
+                  )}
+                  
                   <div className="flex justify-between pt-2 border-t border-black border-dashed mt-2">
                     <span className="text-xs font-bold uppercase">Total Equivalent Weight:</span>
                     <span className="font-mono font-bold text-sm">{calculations.totalOutputKg} Kg</span>
                   </div>
                 </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold uppercase mb-1">Loss Quantity (Kg)</label>
-                <input 
-                  type="number" min="0" step="0.1"
-                  value={lossQty} 
-                  onChange={(e) => setLossQty(e.target.value)} 
-                  className={`w-full px-3 py-2 text-sm font-mono font-bold ${calculations.isLossWarning ? "border-2 border-dashed border-red-600 bg-red-50 text-red-600" : "border border-black"}`} 
-                  placeholder="Estimated roasting loss weight..." 
-                />
-              </div>
-
-              {/* Loss Warning Logic */}
-              {calculations.isLossWarning && (
-                <div className="p-3 border border-red-600 bg-red-50 flex gap-2 items-start text-red-700">
-                  <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-black uppercase">High Loss Warning</p>
-                    <p className="text-xs">Loss rate is <b>{calculations.lossPercentage.toFixed(1)}%</b> (Exceeds standard 20%). Please verify input weights and roasting logs.</p>
-                  </div>
+              ) : (
+                <div className="border border-black border-dashed flex-1 flex items-center justify-center bg-gray-50 text-gray-400 text-xs font-bold uppercase tracking-widest min-h-[100px]">
+                  No Variants Selected
                 </div>
               )}
             </div>
@@ -435,23 +468,32 @@ export function ProductionExecution() {
 
           {/* Step 4: System Generation & Costing */}
           <div className="border-2 border-black bg-white p-6">
-            <h2 className="font-bold uppercase text-sm mb-4 border-b border-black pb-2 tracking-wider">Step 4: Financial Preview</h2>
+            <h2 className="font-bold uppercase text-sm mb-4 border-b border-black pb-2 tracking-wider">4. Inventory & Cost Preview</h2>
             
             <div className="space-y-4">
-              <div className="flex justify-between items-end border-b border-dashed border-black pb-3">
-                <span className="text-xs uppercase font-bold tracking-widest">Total Material Cost</span>
-                <span className="font-mono text-lg">{calculations.totalInputValue.toLocaleString()} ₫</span>
+              <div className="flex justify-between items-end border-b border-dashed border-gray-300 pb-2">
+                <span className="text-xs uppercase font-bold text-gray-500">Total Packaged Weight</span>
+                <span className="font-mono text-sm">{calculations.totalOutputKg} Kg</span>
+              </div>
+              
+              <div className="flex justify-between items-end border-b border-dashed border-gray-300 pb-2">
+                <div>
+                  <span className="block text-xs uppercase font-bold">Unpackaged Leftover (Bulk)</span>
+                  <span className="text-[10px] text-gray-500 uppercase">Stored automatically in Product Batch</span>
+                </div>
+                <span className={`font-mono text-lg font-bold ${calculations.leftoverBulkKg > 0 ? 'text-black' : 'text-gray-400'}`}>
+                  {calculations.leftoverBulkKg} Kg
+                </span>
               </div>
 
-              <div className="pt-2 space-y-3">
-                <span className="block text-xs uppercase font-bold tracking-widest border-b border-black pb-2 mb-2">Estimated Unit COGS (Giá vốn/SP)</span>
+              <div className="pt-2 space-y-2">
+                <span className="block text-xs uppercase font-bold tracking-widest border-b border-black pb-2 mb-2">Estimated Unit COGS</span>
                 {Object.keys(selectedOutputs).length === 0 ? (
-                  <p className="text-[10px] italic text-gray-500">Select output products to view cost breakdown...</p>
+                  <p className="text-[10px] italic text-gray-500">Select variants to view cost breakdown...</p>
                 ) : (
                   Object.keys(selectedOutputs).map(sku => {
                     const weight = getVariantWeight(sku);
-                    // Giá vốn của 1 đơn vị = Giá bình quân 1Kg thành phẩm * Trọng lượng 1 đơn vị
-                    const unitCogs = calculations.costPerFinishedKg * weight;
+                    const unitCogs = calculations.costPerRoastedKg * weight;
                     return (
                       <div key={sku} className="flex justify-between items-center bg-gray-50 p-2 border border-gray-200">
                         <span className="font-mono text-xs">{sku}</span>
@@ -465,13 +507,6 @@ export function ProductionExecution() {
               </div>
             </div>
           </div>
-          
-          {/* Note to grading panel */}
-          {calculations.isBlending && (
-            <p className="text-xs border border-black p-3 italic uppercase font-bold text-center bg-gray-50">
-              * System will generate an auto-mix inventory transaction to maintain 1-to-1 DB integrity.
-            </p>
-          )}
 
         </div>
       </div>
