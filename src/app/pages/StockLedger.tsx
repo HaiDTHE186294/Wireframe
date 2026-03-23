@@ -2,7 +2,17 @@ import { useState } from "react";
 import { ExternalLink, Search, Filter, X, FileText, Settings2, Plus, Minus, ArrowRight, Save } from "lucide-react";
 
 // --- TYPES & INTERFACES ---
-type ActionType = "PO Receipt" | "Prod. Consume" | "Prod. Yield" | "Sales Dispatch" | "Manual Adj";
+type ActionType = 
+  | "Mat.Import"     // Nhập khẩu sản phẩm
+  | "Mat.Consume"    // Tiêu thụ nguyên liệu cho sản xuất
+  | "Mat.Loss"       // Phần nguyên liệu bị thất thoát
+  | "Mat.Add"        // Thêm số lượng material (manual)
+  | "Mat.Deduct"     // Giảm số lượng material (manual)
+  | "Prod.Execute"   // Sản xuất sản phẩm
+  | "Prod.Sell"      // Bán sản phẩm
+  | "Prod.Add"       // Thêm số lượng product (manual)
+  | "Prod.Deduct";   // Giảm số lượng product (manual)
+  
 type ItemCategory = "Raw Material" | "Finished Product";
 
 interface LedgerEntry {
@@ -50,11 +60,11 @@ export function StockLedger() {
       itemName: "Arabica Green Beans",
       batchId: "MAT-20260305-01",
       category: "Raw Material",
-      action: "PO Receipt",
+      action: "Mat.Import",
       qtyChange: 500,
       uom: "Kg",
       performedBy: "INV-01",
-      referenceId: "PO-2026-089",
+      referenceId: "MAT-20260305-01",
     },
     {
       id: "TXN-1002",
@@ -62,35 +72,47 @@ export function StockLedger() {
       itemName: "Arabica Green Beans",
       batchId: "MAT-20260305-01",
       category: "Raw Material",
-      action: "Prod. Consume",
+      action: "Mat.Consume",
       qtyChange: -50,
       uom: "Kg",
       performedBy: "ROAST-02",
-      referenceId: "PRD-2026-102",
+      referenceId: "MAT-20260305-01",
     },
     {
       id: "TXN-1003",
-      timestamp: "2026-03-05 10:45:00",
-      itemName: "SIG-250-W - Signature Blend 250g",
-      batchId: "BAT-20260305-01",
-      category: "Finished Product",
-      action: "Prod. Yield",
-      qtyChange: 170, // 42.5kg / 250g
-      uom: "Units",
+      timestamp: "2026-03-05 10:00:00",
+      itemName: "Arabica Green Beans",
+      batchId: "MAT-20260305-01",
+      category: "Raw Material",
+      action: "Mat.Loss",
+      qtyChange: -2.5,
+      uom: "Kg",
       performedBy: "ROAST-02",
-      referenceId: "PRD-2026-102",
+      referenceId: "MAT-20260305-01",
     },
     {
       id: "TXN-1004",
+      timestamp: "2026-03-05 10:45:00",
+      itemName: "SIG-250-W - Signature Blend 250g",
+      batchId: "LOT-SIG250W-20260305-01",
+      category: "Finished Product",
+      action: "Prod.Execute",
+      qtyChange: 170, // 42.5kg / 250g
+      uom: "Units",
+      performedBy: "ROAST-02",
+      referenceId: "LOT-SIG250W-20260305-01",
+    },
+    {
+      id: "TXN-1005",
       timestamp: "2026-03-05 13:00:00",
       itemName: "SIG-250-W - Signature Blend 250g",
-      batchId: "BAT-20260305-01",
+      batchId: "LOT-SIG250W-20260305-01",
       category: "Finished Product",
-      action: "Sales Dispatch",
+      action: "Prod.Sell",
       qtyChange: -10,
       uom: "Units",
       performedBy: "SALE-01",
-      referenceId: "ORD-20260305-015",
+      referenceId: "LOT-SIG250W-20260305-01",
     },
   ]);
 
@@ -115,7 +137,7 @@ export function StockLedger() {
     { 
       id: "SIG-250-W", name: "Signature Blend 250g (Whole Bean)", 
       batches: [
-        { batchId: "BAT-20260305-01", currentStock: 160 },
+        { batchId: "LOT-SIG250W-20260305-01", currentStock: 160 },
         { batchId: "BAT-20260228-01", currentStock: 45 }
       ] 
     },
@@ -200,17 +222,25 @@ export function StockLedger() {
       if(found) fullItemName = `${found.id} - ${found.name}`;
     }
 
+    // Determine correct action type based on category and adjustment type
+    let actionType: ActionType;
+    if (adjForm.category === "Raw Material") {
+      actionType = adjForm.adjType === "Increase" ? "Mat.Add" : "Mat.Deduct";
+    } else {
+      actionType = adjForm.adjType === "Increase" ? "Prod.Add" : "Prod.Deduct";
+    }
+
     const newLogEntry: LedgerEntry = {
       id: `TXN-${String(ledgerData.length + 1001)}`,
       timestamp: timestamp,
       itemName: fullItemName,
       batchId: adjForm.batchId,
       category: adjForm.category,
-      action: "Manual Adj",
+      action: actionType,
       qtyChange: finalQtyChange,
       uom: currentUom,
       performedBy: "ADMIN-01",
-      referenceId: `ADJ-${timestamp.replace(/[- :]/g, "").slice(0,14)}`,
+      referenceId: adjForm.category === "Raw Material" ? adjForm.batchId : adjForm.batchId,
     };
 
     setLedgerData([newLogEntry, ...ledgerData]);
@@ -302,11 +332,19 @@ export function StockLedger() {
                   className="w-full px-3 py-2 border border-black bg-white text-sm outline-none"
                 >
                   <option value="">All Actions</option>
-                  <option value="PO Receipt">PO Receipt (Nhập mua)</option>
-                  <option value="Prod. Consume">Prod. Consume (Xuất sản xuất)</option>
-                  <option value="Prod. Yield">Prod. Yield (Nhập thành phẩm)</option>
-                  <option value="Sales Dispatch">Sales Dispatch (Xuất bán)</option>
-                  <option value="Manual Adj">Manual Adj (Điều chỉnh kho)</option>
+                  <optgroup label="━━━ Material Actions ━━━">
+                    <option value="Mat.Import">Mat.Import (Nhập khẩu nguyên liệu)</option>
+                    <option value="Mat.Consume">Mat.Consume (Tiêu thụ cho sản xuất)</option>
+                    <option value="Mat.Loss">Mat.Loss (Thất thoát sản xuất)</option>
+                    <option value="Mat.Add">Mat.Add (Thêm thủ công)</option>
+                    <option value="Mat.Deduct">Mat.Deduct (Giảm thủ công)</option>
+                  </optgroup>
+                  <optgroup label="━━━ Product Actions ━━━">
+                    <option value="Prod.Execute">Prod.Execute (Sản xuất)</option>
+                    <option value="Prod.Sell">Prod.Sell (Bán hàng)</option>
+                    <option value="Prod.Add">Prod.Add (Thêm thủ công)</option>
+                    <option value="Prod.Deduct">Prod.Deduct (Giảm thủ công)</option>
+                  </optgroup>
                 </select>
               </div>
               <div className="flex items-end">
@@ -359,7 +397,9 @@ export function StockLedger() {
                       </td>
                       <td className="px-4 py-3 border-r border-black">
                         <span className={`px-2 py-1 border text-[9px] font-bold uppercase ${
-                          entry.action === 'Manual Adj' ? 'border-red-600 text-red-600 bg-red-50' : 'border-black bg-white'
+                          (entry.action === 'Mat.Add' || entry.action === 'Mat.Deduct' || entry.action === 'Prod.Add' || entry.action === 'Prod.Deduct') 
+                            ? 'border-red-600 text-red-600 bg-red-50' 
+                            : 'border-black bg-white'
                         }`}>
                           {entry.action}
                         </span>
